@@ -137,7 +137,8 @@ small, .note { font-size: var(--t2); color: var(--soft); }
 @media (prefers-reduced-motion: reduce) { .checks summary > .icon:last-child { transition: none; } }
 .checks summary::-webkit-details-marker { display: none; }
 .checks summary:hover { background: var(--raise); }
-.checks summary:focus-visible { outline-offset: -2px; border-radius: 0; }
+.checks summary:focus-visible { outline-offset: -4px; border-radius: 8px; }
+.status[data-stale="true"] .checks li[data-off="false"] .icon:first-child { color: var(--soft); }
 .checks .icon { color: var(--ok); }
 .checks [data-off="true"] .icon { color: var(--warn); }
 .checks .label { color: var(--ink); min-width: 0; }
@@ -164,7 +165,7 @@ small, .note { font-size: var(--t2); color: var(--soft); }
 .seg { display: inline-flex; background: var(--raise); border-radius: 9px; padding: 2px; gap: 2px; }
 .seg button {
   position: relative; font: inherit; font-size: var(--t2); font-weight: 500; font-variant-numeric: tabular-nums;
-  min-width: 40px; height: 32px; padding: 0 10px; border: 0; border-radius: 7px;
+  min-width: 44px; height: 32px; padding: 0 8px; border: 0; border-radius: 7px;
   background: none; color: var(--soft); cursor: pointer; white-space: nowrap;
 }
 .seg button::before { content: ""; position: absolute; inset: -6px -1px; }
@@ -320,7 +321,6 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
   .inv li { grid-template-columns: minmax(0, 1fr) auto; }
   .inv .how { grid-column: 1 / -1; grid-row: 2; }
   .bar h2 { font-size: var(--t4); }
-  .seg button { min-width: 44px; padding: 0 8px; }
 }
 </style>
 </head>

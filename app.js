@@ -270,7 +270,7 @@ function coverage(key, range, start, last) {
   const approx = worst > 1.005;
   const notes = [
     missing > 0 && `${daysWord(missing)} missing.`,
-    approx && `≈ Estimates: Cloudflare counted as few as 1 in ${decimalFormat.format(worst)} on some days.`,
+    approx && `≈ Estimates: on some days Cloudflare counted as little as ${pct(1 / worst)} of requests and scaled up.`,
   ];
   return { note: notes.filter(Boolean).join(' '), approx };
 }
@@ -650,8 +650,8 @@ const CHECKS = [
     about: 'Off above 0.5% of requests and 3× usual.' },
   { label: 'Client errors (4xx)', read: (hs) => statusShare(hs, (k) => k[0] === '4'), fmt: pct, limit: 0.1, times: 2,
     about: 'Mostly scanners and mistyped addresses. Off above 10% and 2× usual.' },
-  { label: 'Origin time, 95th percentile', read: (hs) => originTime(hs, 'p95'), fmt: ms, limit: 1000, times: 2,
-    about: "How long Bitview's servers took for the slowest 5% of requests. Off above 1 s and 2× usual." },
+  { label: 'Origin time, p95', read: (hs) => originTime(hs, 'p95'), fmt: ms, limit: 1000, times: 2,
+    about: "The 95th percentile (p95) of how long Bitview's servers took: 5% of requests took longer. Off above 1 s and 2× usual." },
   { label: 'Firewall events a day', read: (hs) => (having(hs, firewallOf).length ? (sum(hs, firewallOf) / having(hs, firewallOf).length) * 24 : null), fmt: (n) => `≈${count(Math.round(n))}`, limit: 1000, times: 5,
     about: 'Requests a Cloudflare security feature acted on. Off above 1,000 a day and 5× usual.' },
   { label: 'Served from cache', read: (hs) => measure(/** @type {Metric} */ (METRICS.find((m) => m.id === 'cache')), hs), fmt: pct, limit: 0.05, times: 0.5, low: true,
@@ -699,7 +699,9 @@ function status() {
   $('verdict').textContent = off.length ? `${off.length} thing${off.length > 1 ? 's' : ''} to look at` : 'All fine';
   $('verdict-icon').replaceWith(Object.assign(icon(off.length ? 'off' : 'ok'), { id: 'verdict-icon' }));
   $('status').dataset.off = String(off.length > 0);
-  $('verdict-sub').textContent = `The last 24 hours, to ${clockFormat.format(new Date(now.through))} UTC, against the 7 days before. Open a check for how it's judged.`;
+  // Every check reads the last pull, so while that is old none of them can say all is fine.
+  $('status').dataset.stale = String(age > 3);
+  $('verdict-sub').textContent = `The last 24 hours, to ${clockFormat.format(new Date(now.through))} UTC, against the 7\u00a0days before. Open a check for how it's judged.`;
   $('checks').replaceChildren(
     ...[...off, ...items.filter((i) => !i.off)].map((i) => {
       const li = html('li');
@@ -760,7 +762,7 @@ function overview() {
   const days = main.start === main.last ? longDayFormat.format(toDate(main.last)) : `${longDayFormat.format(toDate(main.start))} to ${longDayFormat.format(toDate(main.last))}`;
   $('through').textContent = [
     hourly
-      ? `The last ${period} by hour, to ${dayFormat.format(through)}, ${clockFormat.format(through)} UTC${missing ? `, ${missing} hours missing` : ''}. Lists add up whole days, ${listSpan(main)}.`
+      ? `The last ${period} by hour, to ${dayFormat.format(through)}, ${clockFormat.format(through)} UTC${missing ? `, ${missing} hours missing` : ''}. Lists add up whole days, each dated.`
       : `${days}, UTC${missing ? `, ${daysWord(missing)} missing` : ''}. A chart with less history shows what it has, and says so.`,
     prev && `Changes are against the ${period} before.`,
   ].filter(Boolean).join(' ');
@@ -863,7 +865,7 @@ function speed() {
   const f = frame('origin');
   const { b, unitNote, head, over, rows } = { ...f, ...framed(f) };
   const recs = b.recs.flat();
-  const lines = /** @type {const} */ ([['Median', 'p50', 'var(--s1)'], ['95th percentile', 'p95', 'var(--s2)']]).map(([name, q, color]) => ({
+  const lines = /** @type {const} */ ([['Median (p50)', 'p50', 'var(--s1)'], ['95th percentile (p95)', 'p95', 'var(--s2)']]).map(([name, q, color]) => ({
     name, color, values: b.recs.map((rs) => originTime(rs, q)), total: originTime(recs, q),
   }));
   const has = (/** @type {Rec} */ d) => d.origin?.p50;
