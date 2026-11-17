@@ -6,386 +6,435 @@
 <title>What Bitview can see</title>
 <meta name="description" content="Everything Cloudflare offers Bitview's operators about its visitors, what is published from it, and Bitview's traffic, updated every hour.">
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="https://bitview.space/assets/favicon/favicon.svg">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7f9">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0b0d">
+<link rel="icon" type="image/svg+xml" href="https://bitview.space/assets/favicon/favicon.svg">
+<script>document.documentElement.classList.add('loading')</script>
+<link rel="preload" href="https://bitview.space/assets/fonts/InterVariable.core.woff2" as="font" type="font/woff2" crossorigin>
 <style>
-:root {
-  color-scheme: light;
-  --page: #f9f9f7;
-  --surface: #fcfcfb;
-  --ink: #0b0b0b;
-  --ink-2: #52514e;
-  --muted: #6f6d68;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --ring: rgba(11, 11, 11, .10);
-  --wash: rgba(11, 11, 11, .04);
-  --s1: #2a78d6;
-  --s2: #eb6834;
-  --s3: #1baf7a;
-  --bar: rgba(42, 120, 214, .14);
-  --focus: #2a78d6;
-  --good: #0ca30c;
-  --warn: #fab219;
-  --warn-ink: #8a5a00;
+/* Bitview's face and its Logs page's colours: cool paper by day, near-black by night; colour only for data and status. */
+@font-face {
+  font-family: "Inter Fallback";
+  src: local("ArialMT"), local("Arial"), local("Helvetica"), local("Roboto");
+  font-weight: 100 600;
+  size-adjust: 108.088066%; ascent-override: 89.625991%; descent-override: 22.316149%; line-gap-override: 0%;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --ink: #f0efec;
-    --ink-2: #c3c2b7;
-    --muted: #9a9890;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --ring: rgba(255, 255, 255, .10);
-    --wash: rgba(255, 255, 255, .05);
-    --s1: #3987e5;
-    --s2: #d95926;
-    --s3: #199e70;
-    --bar: rgba(57, 135, 229, .22);
-    --focus: #6da7ec;
-    --warn-ink: #fab219;
+@font-face {
+  font-family: "Inter Fallback";
+  src: local("Arial-BoldMT"), local("Arial Bold"), local("Helvetica Bold"), local("Roboto Bold");
+  font-weight: 601 900;
+  size-adjust: 99.756055%; ascent-override: 97.111900%; descent-override: 24.180080%; line-gap-override: 0%;
+}
+@font-face {
+  font-family: Inter;
+  src: url("https://bitview.space/assets/fonts/InterVariable.core.woff2") format("woff2");
+  unicode-range: U+0000-017F, U+0192, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0300-036F, U+2000-206F, U+20AC, U+2122, U+2190-23FF, U+2248, U+2500-25FF, U+FEFF, U+FFFD;
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root {
+  color-scheme: light dark;
+  --app: light-dark(#f6f7f9, #0a0b0d);
+  --panel: light-dark(#ffffff, #101215);
+  --raise: light-dark(#eceef2, #181b20);
+  --ink: light-dark(#0f1217, #eceef2);
+  --text: light-dark(#2e3440, #bcc1cb);
+  --soft: light-dark(#4f5664, #959cab);
+  --line: light-dark(rgb(15 18 23 / 0.1), rgb(255 255 255 / 0.08));
+  --line2: light-dark(rgb(15 18 23 / 0.18), rgb(255 255 255 / 0.15));
+  --spark: light-dark(rgb(15 18 23 / 0.28), rgb(255 255 255 / 0.28));
+  --ok: light-dark(#13804a, #4ade80);
+  --warn: light-dark(#9a5b00, #f5b74a);
+  --warn-bg: light-dark(rgb(240 165 30 / 0.1), rgb(245 183 74 / 0.08));
+  --s1: light-dark(#3557c4, #6f8ff0);
+  --s2: light-dark(#d0661f, #d96a26);
+  --bar: light-dark(rgb(53 87 196 / 0.1), rgb(111 143 240 / 0.14));
+  --focus: light-dark(#3557c4, #8aa8ff);
+  --sans: Inter, "Inter Fallback", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* One size scale for the page and its charts. */
+  --t1: 12px; --t2: 13px; --t3: 15px; --t4: 18px; --t5: 24px; --t6: 32px;
+  --gutter: max(16px, env(safe-area-inset-left));
+  --radius: 12px;
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+@media (prefers-contrast: more) {
+  :root {
+    --text: light-dark(#1e222b, #d4d7de);
+    --soft: light-dark(#343943, #b7bcc7);
+    --line: light-dark(rgb(15 18 23 / 0.22), rgb(255 255 255 / 0.18));
+    --line2: light-dark(rgb(15 18 23 / 0.4), rgb(255 255 255 / 0.33));
   }
 }
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --page: #0d0d0d;
-  --surface: #1a1a19;
-  --ink: #f0efec;
-  --ink-2: #c3c2b7;
-  --muted: #9a9890;
-  --grid: #2c2c2a;
-  --axis: #383835;
-  --ring: rgba(255, 255, 255, .10);
-  --wash: rgba(255, 255, 255, .05);
-  --s1: #3987e5;
-  --s2: #d95926;
-  --s3: #199e70;
-  --bar: rgba(57, 135, 229, .22);
-  --focus: #6da7ec;
-  --warn-ink: #fab219;
-}
 
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+*, *::before, *::after { box-sizing: border-box; }
+/* What the data fills in appears at once when it has arrived, so nothing moves while it loads. */
+.loading :is(.status, .marks, main) { visibility: hidden; }
+[hidden] { display: none !important; }
+html { background: var(--app); -webkit-text-size-adjust: 100%; overflow-x: clip; scroll-padding-top: 72px; }
 body {
-  margin: 0;
-  background: var(--page);
-  color: var(--ink);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0; overflow-x: clip;
+  background: var(--app); color: var(--text);
+  font: var(--t3)/1.55 var(--sans);
+  font-feature-settings: "cv11";
+  -webkit-font-smoothing: antialiased;
 }
-main {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 40px max(16px, env(safe-area-inset-left));
-  display: grid;
-  gap: 16px;
-}
-a { color: inherit; text-underline-offset: 2px; }
-p { text-wrap: pretty; }
+::selection { background: var(--bar); }
+a { color: var(--ink); text-underline-offset: 0.2em; text-decoration-color: var(--line2); }
+a:hover { text-decoration-color: currentColor; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
-h1, h2 { margin: 0; font-weight: 600; letter-spacing: -.01em; }
-h1 { font-size: 22px; }
-h2 { font-size: 15px; }
-.sub { color: var(--ink-2); font-size: 13px; }
+h1, h2, h3 { margin: 0; color: var(--ink); font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; }
+h1 { font-size: var(--t6); letter-spacing: -0.025em; line-height: 1.1; }
+h2 { font-size: var(--t4); }
+h3 { font-size: var(--t3); }
+p { margin: 0; text-wrap: pretty; }
+small, .note { font-size: var(--t2); color: var(--soft); }
 .num { font-variant-numeric: tabular-nums; }
+.icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 
-header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
-header p { margin: 2px 0 0; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 var(--gutter); }
+.panel { background: var(--panel); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--line); padding: 20px; min-width: 0; }
+.stack { display: grid; gap: 16px; }
 
-.seg { display: inline-flex; background: var(--wash); border-radius: 10px; padding: 3px; gap: 2px; }
+/* Header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: max(16px, env(safe-area-inset-top)); height: 56px; box-sizing: content-box; }
+.home { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; text-decoration: none; min-height: 44px; }
+.home img { width: 20px; height: 20px; }
+.updated { font-size: var(--t2); color: var(--soft); }
+
+/* Intro and status */
+.hero { display: grid; gap: 24px; padding: 24px 0 40px; }
+.intro { display: grid; gap: 16px; align-content: start; }
+.lead { font-size: var(--t4); line-height: 1.5; color: var(--text); max-width: 34em; }
+.marks ul { display: grid; margin: 0; padding: 0; list-style: none; }
+.marks li + li { border-top: 1px solid var(--line); }
+.marks a { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 4px 10px; padding: 14px 0; text-decoration: none; }
+.marks .icon { margin-top: 3px; color: var(--soft); }
+.marks b { color: var(--ink); font-weight: 600; }
+.marks a:hover b { text-decoration: underline; text-decoration-color: var(--line2); }
+.marks ul ul { grid-column: 2; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 12em), 1fr)); gap: 2px 16px; font-size: var(--t2); color: var(--text); }
+.marks ul ul li { border: 0; }
+.marks p { grid-column: 2; font-size: var(--t2); color: var(--soft); }
+
+.status { padding: 0; align-self: start; overflow: hidden; }
+.verdict { display: flex; gap: 12px; align-items: start; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+.verdict .icon { width: 24px; height: 24px; color: var(--ok); }
+.status[data-off="true"] .verdict { background: var(--warn-bg); }
+.status[data-off="true"] .verdict .icon { color: var(--warn); }
+.verdict p { font-size: var(--t2); color: var(--soft); min-height: 2lh; }
+.checks { list-style: none; margin: 0; padding: 4px 0; }
+.checks details > summary {
+  list-style: none; cursor: pointer;
+  display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 2px 12px;
+  padding: 9px 20px; min-height: 44px;
+}
+.checks summary::-webkit-details-marker { display: none; }
+.checks summary:hover { background: var(--raise); }
+.checks .icon { color: var(--ok); }
+.checks [data-off="true"] .icon { color: var(--warn); }
+.checks .label { color: var(--ink); min-width: 0; }
+.checks .val { display: flex; align-items: center; gap: 12px; justify-content: end; font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+.checks .usual { color: var(--soft); font-size: var(--t2); min-width: 7.5em; text-align: right; }
+.checks .spark { width: 72px; height: 20px; display: block; }
+.checks .about { padding: 0 20px 12px 48px; font-size: var(--t2); color: var(--soft); }
+.checks table { margin-top: 8px; }
+
+/* Traffic bar: the one sticky element, its range scoping everything below it. */
+.bar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+  padding: max(10px, env(safe-area-inset-top)) var(--gutter) 10px;
+  margin: 0 calc(-1 * var(--gutter));
+  background: color-mix(in srgb, var(--app) 88%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px); backdrop-filter: saturate(1.4) blur(12px);
+  border-bottom: 1px solid transparent;
+}
+.bar.stuck { border-bottom-color: var(--line); }
+.bar h2 { font-size: var(--t5); letter-spacing: -0.02em; }
+.through { margin: 2px 0 16px; font-size: var(--t2); color: var(--soft); }
+
+.seg { display: inline-flex; background: var(--raise); border-radius: 9px; padding: 2px; gap: 2px; }
 .seg button {
-  font: inherit; font-size: 13px; font-weight: 500;
-  min-width: 44px; min-height: 36px; padding: 0 10px;
-  border: 0; border-radius: 8px; background: none; color: var(--ink-2); cursor: pointer;
+  position: relative; font: inherit; font-size: var(--t2); font-weight: 500; font-variant-numeric: tabular-nums;
+  min-width: 40px; height: 32px; padding: 0 10px; border: 0; border-radius: 7px;
+  background: none; color: var(--soft); cursor: pointer; white-space: nowrap;
 }
-.seg button, summary, h1 a { position: relative; }
-/* Touch reach without changing the look: an invisible margin around small controls. */
-.seg button::before, summary::before, h1 a::before { content: ""; position: absolute; inset: -6px -2px; }
-h1 a::before { inset: -10px -4px; }
-summary::before { inset: -6px -8px; }
-.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--ring); }
+.seg button::before { content: ""; position: absolute; inset: -6px -1px; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 0 0 1px var(--line); }
 
-.card { background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--ring); padding: 16px; min-width: 0; }
-.card > header { margin-bottom: 12px; align-items: center; }
+.tabs { display: flex; gap: 16px; overflow-x: auto; scrollbar-width: none; }
+.tabs button {
+  position: relative; font: inherit; font-size: var(--t2); font-weight: 500; color: var(--soft);
+  background: none; border: 0; padding: 0; height: 32px; cursor: pointer; white-space: nowrap;
+  box-shadow: inset 0 -2px 0 transparent;
+}
+.tabs button::before { content: ""; position: absolute; inset: -6px -8px; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-pressed="true"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
 
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; padding: 6px; }
+/* Overview: the metrics are the chart's tabs. */
+.overview { padding: 0; }
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
 .kpi {
-  font: inherit; text-align: left; color: inherit; background: none; border: 0; border-radius: 10px;
-  padding: 10px 12px; cursor: pointer; display: grid; gap: 2px; min-height: 44px;
+  font: inherit; text-align: left; color: inherit; background: none; border: 0; cursor: pointer;
+  display: grid; align-content: start; gap: 2px; padding: 14px 16px; min-width: 0;
+  box-shadow: inset 0 -2px 0 transparent;
 }
-.kpi:hover { background: var(--wash); }
-.kpi[aria-pressed="true"] { background: var(--wash); box-shadow: inset 0 -2px 0 var(--s1); }
-.kpi .label { font-size: 13px; color: var(--ink-2); }
-.kpi .value { font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
-.kpi .delta { font-size: 12px; color: var(--muted); }
+.kpi:nth-child(odd) { border-right: 1px solid var(--line); }
+.kpi:nth-child(n + 3) { border-top: 1px solid var(--line); }
+.kpi:hover { background: var(--raise); }
+.kpi:last-child:nth-child(odd) { grid-column: span 2; }
+.kpi[aria-pressed="true"] { box-shadow: inset 0 -2px 0 var(--s1); }
+.kpi .k { font-size: var(--t2); color: var(--soft); }
+.kpi[aria-pressed="true"] .k { color: var(--ink); }
+.kpi .v { font-size: var(--t5); font-weight: 600; color: var(--ink); letter-spacing: -0.02em; line-height: 1.2; white-space: nowrap; }
+.kpi .d { font-size: var(--t1); color: var(--soft); font-variant-numeric: tabular-nums; }
+.overview .body { padding: 16px 20px 16px 12px; display: grid; gap: 8px; }
+.overview .note { padding-left: 8px; }
 
-.chart { position: relative; touch-action: pan-y; }
+/* Charts */
+.chart { position: relative; touch-action: pan-y; min-height: var(--h, 160px); }
 .chart svg { display: block; width: 100%; overflow: visible; }
 .chart svg:focus-visible { outline-offset: 4px; }
-.chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart text { fill: var(--soft); font-size: var(--t1); font-variant-numeric: tabular-nums; }
 .tip {
   position: absolute; top: 0; pointer-events: none; z-index: 1;
-  background: var(--surface); box-shadow: 0 0 0 1px var(--ring), 0 6px 20px rgba(0, 0, 0, .12);
-  border-radius: 8px; padding: 6px 9px; font-size: 12px; white-space: nowrap;
+  background: var(--panel); border-radius: 8px; padding: 8px 10px; font-size: var(--t2); white-space: nowrap;
+  box-shadow: 0 0 0 1px var(--line), 0 8px 24px rgb(0 0 0 / 0.12);
+  display: grid; gap: 2px;
 }
-.tip .when { color: var(--ink-2); }
-.tip .row { display: flex; align-items: center; gap: 6px; }
-.tip .row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tip .when { color: var(--soft); font-size: var(--t1); }
+.tip .row { display: flex; align-items: center; gap: 8px; }
+.tip b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .key { display: inline-block; width: 12px; height: 2px; border-radius: 1px; flex: none; }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--ink-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--t2); color: var(--soft); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
-details { margin-top: 8px; font-size: 13px; }
-summary { color: var(--ink-2); cursor: pointer; min-height: 32px; display: flex; align-items: center; width: max-content; }
-.scroll { overflow-x: auto; max-height: 320px; }
-table { border-collapse: collapse; width: 100%; }
-th, td { padding: 4px 8px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-th:first-child, td:first-child { text-align: left; }
-th { font-weight: 500; color: var(--ink-2); position: sticky; top: 0; background: var(--surface); }
-tr + tr td { border-top: 1px solid var(--grid); }
+details.table > summary {
+  position: relative; list-style: none; cursor: pointer; width: max-content;
+  font-size: var(--t2); color: var(--soft); min-height: 32px; display: flex; align-items: center; gap: 4px;
+}
+details.table > summary::before { content: ""; position: absolute; inset: -6px -8px; }
+details.table > summary::-webkit-details-marker { display: none; }
+details.table > summary:hover { color: var(--ink); }
+details.table > summary .icon { width: 14px; height: 14px; transition: transform 0.15s ease-out; }
+details.table[open] > summary .icon { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { details.table > summary .icon { transition: none; } }
+.scroll { overflow: auto; max-height: 320px; margin-top: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: var(--t2); }
+th, td { padding: 6px 8px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; padding-left: 0; }
+th { font-weight: 500; color: var(--soft); position: sticky; top: 0; background: var(--panel); }
+td { border-top: 1px solid var(--line); color: var(--ink); }
 
-.multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px 24px; }
-.multiples h3 { margin: 0; font-size: 13px; font-weight: 500; display: flex; justify-content: space-between; gap: 8px; }
-.multiples h3 span { color: var(--ink-2); font-weight: 400; }
+/* Panels and their grids */
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
+.panel > header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 12px; }
+.panel > header .tabs { margin: -6px 0; }
+.panel .note { margin-top: 10px; }
+.figure { font-size: var(--t5); font-weight: 600; color: var(--ink); letter-spacing: -0.02em; line-height: 1.2; }
+.multiples { display: grid; gap: 20px 24px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.multiples > div { display: grid; gap: 2px; min-width: 0; }
+.multiples h3 { font-size: var(--t2); font-weight: 500; color: var(--soft); display: flex; justify-content: space-between; gap: 8px; }
 
-.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; }
-.rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 14px; }
-.rank li { display: grid; grid-template-columns: 1fr auto 4.2em; gap: 10px; align-items: center; min-height: 32px; }
+/* Ranked lists */
+.rank-head, .rank li { display: grid; grid-template-columns: minmax(0, 1fr) 5.5em 3.5em; gap: 12px; align-items: center; }
+.rank-head { font-size: var(--t1); color: var(--soft); padding: 0 0 6px; white-space: nowrap; }
+.rank-head span + span, .rank .v, .rank .s { text-align: right; }
+.rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rank li { min-height: 32px; font-size: var(--t2); }
 .rank .name {
-  position: relative; padding: 5px 8px; border-radius: 6px; min-width: 0;
-  overflow-wrap: anywhere;
+  padding: 5px 8px; border-radius: 6px; min-width: 0; color: var(--ink); overflow-wrap: anywhere;
   background: linear-gradient(90deg, var(--bar) var(--w), transparent var(--w));
 }
-.rank .name small { color: var(--ink-2); font-size: inherit; }
-.rank .v { text-align: right; font-variant-numeric: tabular-nums; }
-.rank .s { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
-.rank-head { display: grid; grid-template-columns: 1fr auto 4.2em; gap: 10px; font-size: 12px; color: var(--muted); padding: 0 8px 4px; }
+.rank .name small { color: var(--soft); font-size: inherit; }
+.rank .v { color: var(--ink); font-variant-numeric: tabular-nums; }
+.rank .s { color: var(--soft); font-variant-numeric: tabular-nums; }
 .more {
-  font: inherit; font-size: 13px; color: var(--ink-2); background: none; border: 0; cursor: pointer;
-  padding: 0 8px; min-height: 36px; margin-top: 4px;
+  position: relative; font: inherit; font-size: var(--t2); color: var(--soft); background: none; border: 0; cursor: pointer;
+  padding: 0; min-height: 32px; margin-top: 4px;
 }
+.more::before { content: ""; position: absolute; inset: -6px -8px; }
 .more:hover { color: var(--ink); }
-.controls { display: flex; flex-wrap: wrap; gap: 8px; }
-.group { display: grid; gap: 10px; }
-.traffic { gap: 16px; }
-.traffic > header { padding: 12px 4px 0; }
-.traffic > header h2 { font-size: 19px; }
-.lead { margin: 0 0 6px; max-width: 65ch; color: var(--ink-2); }
-.lead a, .defs a { color: var(--ink); }
-.marks { margin-top: 14px; }
-.marks h3 { margin: 0; padding: 0 0 6px; font-size: 14px; font-weight: 600; display: flex; flex-wrap: wrap; gap: 0 8px; }
-.marks h3 span { color: var(--ink-2); font-weight: 400; }
-.inv { list-style: none; margin: 0; padding: 0; font-size: 14px; }
-.inv li {
-  display: grid; grid-template-columns: minmax(9em, 1fr) 2.4fr auto; gap: 2px 16px;
-  padding: 7px 0; border-top: 1px solid var(--grid);
-}
-.inv .how { color: var(--ink-2); min-width: 0; }
-.inv .kept { color: var(--muted); font-size: 13px; text-align: right; white-space: nowrap; }
-.inv code {
-  display: none; margin-top: 2px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
+.empty { color: var(--soft); font-size: var(--t2); padding: 16px 0; }
+
+/* What we can see */
+.section { padding: 64px 0 0; display: grid; gap: 16px; }
+.section > header { display: grid; gap: 8px; max-width: 46em; }
+.section > header h2 { font-size: var(--t5); letter-spacing: -0.02em; }
+.inv-group + .inv-group { margin-top: 24px; }
+.inv-group > h3 { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; }
+.inv-group > h3 .icon { color: var(--soft); }
+.inv-group > h3 small { font-weight: 400; }
+.inv { list-style: none; margin: 0; padding: 0; }
+.inv li { display: grid; grid-template-columns: minmax(10em, 1fr) minmax(0, 2.2fr) auto; gap: 2px 20px; padding: 10px 0; border-top: 1px solid var(--line); font-size: var(--t2); }
+.inv .what { color: var(--ink); font-weight: 500; }
+.inv .kept { color: var(--soft); text-align: right; white-space: nowrap; }
+.inv code { display: none; margin-top: 4px; font: inherit; font-size: var(--t1); color: var(--soft); overflow-wrap: anywhere; }
 .show-fields .inv code { display: block; }
-.see > header .more { margin: 0; }
-@media (max-width: 640px) {
-  .inv li { grid-template-columns: 1fr auto; }
-  .inv .how { grid-column: 1 / -1; }
+.toggle { font: inherit; font-size: var(--t2); color: var(--ink); background: var(--raise); border: 0; border-radius: 8px; height: 32px; padding: 0 12px; cursor: pointer; position: relative; }
+.toggle::before { content: ""; position: absolute; inset: -6px -2px; }
+.toggle:hover { background: var(--line2); }
+.prose { display: grid; gap: 12px; max-width: 42em; }
+.prose b { color: var(--ink); font-weight: 600; }
+.prose h3 { margin-top: 12px; }
+.panel h3.sub { margin: 20px 0 8px; }
+
+footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); font-size: var(--t2); color: var(--soft); display: flex; flex-wrap: wrap; gap: 8px 20px; }
+
+@media (min-width: 900px) {
+  .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); grid-template-rows: auto 1fr; gap: 24px 48px; padding: 40px 0 56px; }
+  .status { grid-column: 2; grid-row: 1 / span 2; }
+  h1 { font-size: 40px; }
+  .kpis { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); grid-template-columns: none; }
+  .kpi { padding: 16px 20px; border-top: 0 !important; border-right: 1px solid var(--line); }
+  .kpi:last-child { border-right: 0; }
+  .overview .body { padding: 20px 24px 20px 16px; }
 }
-.group > h2 { font-size: 17px; padding: 0 4px; }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
-.cards .card > h2 { margin-bottom: 8px; }
-.note { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
-.note:empty { display: none; }
-.big { font-size: 20px; font-weight: 600; margin: 2px 0 6px; }
-.list-title { margin: 16px 0 4px; font-size: 14px; font-weight: 600; }
-.glance h2 { font-size: 19px; }
-.glance h2::before { content: "✓ "; color: var(--good); }
-.glance[data-off="true"] h2::before { content: "! "; color: var(--warn-ink); }
-.checks { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 6px; }
-.checks li { display: grid; grid-template-columns: 20px 1fr; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--wash); font-size: 13px; }
-.checks li[data-off="true"] { box-shadow: inset 3px 0 0 var(--warn); }
-.checks .mark {
-  width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
-  background: var(--good); color: #0b0b0b;
-}
-.checks li[data-off="true"] .mark { background: var(--warn); color: #0b0b0b; }
-.checks .label { display: block; font-weight: 600; font-size: 14px; }
-.checks .value { display: block; color: var(--ink); font-variant-numeric: tabular-nums; }
-#judged dl { margin: 4px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; color: var(--ink-2); }
-#judged dt { color: var(--ink); font-weight: 500; }
-#judged dd { margin: 0; }
-@media (max-width: 520px) { #judged dl { grid-template-columns: 1fr; } #judged dd { margin-bottom: 6px; } }
-.defs { display: grid; gap: 10px; font-size: 14px; color: var(--ink-2); }
-.defs h2 { color: var(--ink); }
-.defs p { margin: 0; max-width: 65ch; }
-.defs b { color: var(--ink); font-weight: 600; }
-footer { color: var(--ink-2); font-size: 13px; display: grid; gap: 4px; padding: 0 4px; }
-footer p { margin: 0; }
-/* Until the data is drawn, so nothing jumps as it arrives. */
-main.loading > :not(header) { visibility: hidden; }
-@media (max-width: 520px) {
-  h1 { font-size: 20px; }
-  .kpi .value { font-size: 20px; }
-  .card { padding: 14px 12px; }
+@media (max-width: 599px) {
+  .panel { padding: 16px; }
+  .checks summary { padding: 9px 16px; }
+  .checks .about { padding: 0 16px 12px 44px; }
+  .checks .usual { display: none; }
+  .checks .val { gap: 8px; }
+  .checks .spark { width: 48px; }
+  .verdict { padding: 16px; }
+  .inv li { grid-template-columns: minmax(0, 1fr) auto; }
+  .inv .how { grid-column: 1 / -1; grid-row: 2; }
+  .bar h2 { font-size: var(--t4); }
+  .seg button { min-width: 44px; padding: 0 8px; }
 }
 </style>
 </head>
 <body>
-<main class="loading">
-  <header>
-    <div>
-      <h1>What <a href="https://bitview.space">Bitview</a> can see</h1>
-      <p class="sub">What Cloudflare offers Bitview's operators about its visitors, what is published from it, and the
-        traffic itself.</p>
-    </div>
+<div class="wrap">
+  <header class="top">
+    <a class="home" href="https://bitview.space"><img src="https://bitview.space/assets/logo/logo.svg" alt="">Bitview</a>
+    <span class="updated" id="updated"></span>
   </header>
 
-  <section class="card glance" id="glance" aria-labelledby="glance-title">
-    <h2 id="glance-title">Loading…</h2>
-    <p class="note" id="glance-sub"></p>
-    <ul class="checks" id="checks"></ul>
-    <details id="judged"><summary>How each is judged</summary><dl></dl></details>
-    <details id="tunnels"><summary>Tunnels</summary><div class="scroll"></div></details>
-  </section>
+  <div class="hero">
+    <section class="intro" aria-labelledby="title">
+      <h1 id="title">What Bitview can see</h1>
+      <p class="lead">Bitview is served through Cloudflare, which records every request. Here is what Cloudflare
+        offers Bitview's operators about you, what is published from it, and the traffic itself.</p>
+    </section>
 
-  <section class="card see" aria-labelledby="see-title">
-    <header>
-      <h2 id="see-title">What we can see</h2>
-      <button class="more" id="show-fields" aria-pressed="false">Show Cloudflare's field names</button>
-    </header>
-    <p class="lead">Bitview is served through Cloudflare, which records every request it answers. For a month it keeps a
-      record of each one, with the IP address, the full user agent, the path and query, and more, and Bitview's
-      operators could read all of it. Nothing of ours does: one script, <a
-      href="https://github.com/bitcoinresearchkit/stats/blob/main/pull.py">pull.py</a>, reads <span id="reads"></span>,
-      plus the zone's DNS names and its tunnels' status, every hour, and publishes only what is marked below.</p>
-    <div id="inventory"></div>
-    <details id="datasets"><summary></summary><div class="scroll"></div></details>
-  </section>
-
-  <section class="card defs" aria-labelledby="logs-title">
-    <h2 id="logs-title">Bitview's own logs</h2>
-    <p>Bitview's server logs one line per request: the time, the method, the status, the path with its query, and how
-      long the answer took. No IP address, no user agent, nothing else about who sent it. The lines are kept in daily
-      files that the server deletes after seven days. The last 1,000 lines are public, on the
-      <a href="https://bitview.space/logs/">Logs page</a> and at
-      <a href="https://bitview.space/api/server/logs">/api/server/logs</a>. The MCP server logs only its start.
-      Bitview's <a href="https://bitview.space/privacy/">privacy page</a> says the same.</p>
-  </section>
-
-  <section class="group traffic" aria-labelledby="traffic-title">
-    <header>
-      <div>
-        <h2 id="traffic-title">Traffic</h2>
-        <p class="sub" id="through">Loading…</p>
+    <section class="panel status" id="status" aria-labelledby="verdict">
+      <div class="verdict">
+        <svg class="icon" id="verdict-icon" viewBox="0 0 24 24" aria-hidden="true"></svg>
+        <div><h2 id="verdict">Loading</h2><p id="verdict-sub"></p></div>
       </div>
-      <div class="seg" id="ranges" role="group" aria-label="Date range"></div>
-    </header>
-
-    <section class="card" aria-labelledby="metric-title">
-      <div class="kpis" id="kpis" role="group" aria-label="Metric"></div>
-      <h2 id="metric-title" class="sub" style="font-weight:400;margin:12px 4px 0"></h2>
-      <p class="note" id="metric-about" style="margin:0 4px 6px"></p>
-      <div class="chart" id="main-chart"></div>
-      <details id="main-table"><summary>Table</summary><div class="scroll"></div></details>
+      <ul class="checks" id="checks"></ul>
     </section>
 
-    <section class="card" aria-labelledby="kinds-title">
-      <header><h2 id="kinds-title">API, pages and MCP</h2></header>
-      <p class="note" id="kinds-note"></p>
-      <div class="multiples" id="kinds"></div>
-      <details id="kinds-table"><summary>Table</summary><div class="scroll"></div></details>
-    </section>
+    <nav class="marks" aria-label="What we can see"><ul id="marks"></ul></nav>
+  </div>
 
-    <div class="pair">
-      <section class="card" aria-labelledby="errors-title">
+  <main>
+    <div class="bar" id="bar">
+      <h2 id="traffic">Traffic</h2>
+      <div class="seg" id="ranges" role="group" aria-label="Date range">
+        <button type="button" value="24h">24h</button><button type="button" value="7d">7d</button><button type="button" value="30d">30d</button><button type="button" value="90d">90d</button><button type="button" value="1y">1y</button><button type="button" value="all">All</button>
+      </div>
+    </div>
+    <p class="through" id="through">Loading</p>
+
+    <div class="stack">
+      <section class="panel overview" aria-labelledby="traffic">
+        <div class="kpis" id="kpis" role="group" aria-label="Metric"></div>
+        <div class="body">
+          <div class="chart" id="main-chart" style="--h: 260px"></div>
+          <p class="note" id="metric-about"></p>
+          <details class="table" id="main-table"></details>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="kinds-title">
+        <header><h2 id="kinds-title">API, pages and MCP</h2></header>
+        <div class="multiples" id="kinds"></div>
+        <p class="note" id="kinds-note"></p>
+        <details class="table" id="kinds-table"></details>
+      </section>
+
+      <section class="panel" aria-labelledby="errors-title">
         <header><h2 id="errors-title">Errors</h2></header>
-        <p class="note" id="errors-note"></p>
         <div class="multiples" id="errors"></div>
-        <details id="errors-table"><summary>Table</summary><div class="scroll"></div></details>
+        <p class="note" id="errors-note"></p>
+        <details class="table" id="errors-table"></details>
       </section>
-      <section class="card" aria-labelledby="status-title">
-        <header><h2 id="status-title">Status codes</h2></header>
-        <p class="note" id="status-note"></p>
-        <div id="status"></div>
-      </section>
+
+      <div class="grid">
+        <section class="panel" aria-labelledby="speed-title">
+          <header><h2 id="speed-title">Origin response time</h2><div class="legend" id="speed-legend"></div></header>
+          <div class="chart" id="speed-chart" style="--h: 200px"></div>
+          <p class="note" id="speed-note"></p>
+          <details class="table" id="speed-table"></details>
+        </section>
+        <section class="panel" aria-labelledby="firewall-title">
+          <header><h2 id="firewall-title">Firewall</h2><span class="figure" id="firewall-total"></span></header>
+          <div class="chart" id="firewall-chart" style="--h: 160px"></div>
+          <p class="note" id="firewall-note"></p>
+          <details class="table" id="firewall-table"></details>
+          <h3 class="sub">By rule</h3>
+          <div id="firewall-rules"></div>
+        </section>
+      </div>
+
+      <div class="grid" id="cards"></div>
     </div>
 
-    <div class="pair">
-      <section class="card" aria-labelledby="speed-title">
-        <header><h2 id="speed-title">Origin response time</h2></header>
-        <p class="note" id="speed-note"></p>
-        <div class="legend" id="speed-legend"></div>
-        <div class="chart" id="speed-chart"></div>
-        <details id="speed-table"><summary>Table</summary><div class="scroll"></div></details>
-      </section>
-      <section class="card" aria-labelledby="firewall-title">
-        <header><h2 id="firewall-title">Firewall</h2></header>
-        <p class="note" id="firewall-note"></p>
-        <div class="big" id="firewall-big"></div>
-        <div class="chart" id="firewall-chart"></div>
-        <details id="firewall-table"><summary>Table</summary><div class="scroll"></div></details>
-        <h3 class="list-title" id="firewallRules-title">By rule</h3>
-        <p class="note" id="firewallRules-note"></p>
-        <div id="firewallRules"></div>
-      </section>
-    </div>
-
-    <div class="pair">
-      <section class="card" aria-labelledby="routes-title">
-        <header>
-          <h2 id="routes-title">Top routes</h2>
-          <div class="controls">
-            <div class="seg" id="route-kind" role="group" aria-label="Kind"></div>
-            <div class="seg" id="route-by" role="group" aria-label="Rank by"></div>
-          </div>
-        </header>
-        <p class="note" id="routes-note"></p>
-        <div id="routes"></div>
-      </section>
-      <section class="card" aria-labelledby="countries-title">
-        <header><h2 id="countries-title">Countries</h2></header>
-        <p class="note" id="countries-note"></p>
-        <div id="countries"></div>
-      </section>
-    </div>
-
-    <section class="group" aria-labelledby="visitors-title">
-      <h2 id="visitors-title">Visitors</h2>
-      <div class="cards" id="visitors"></div>
+    <section class="section" id="inventory" aria-labelledby="inventory-title">
+      <header>
+        <h2 id="inventory-title">What we can see</h2>
+        <p>Cloudflare keeps a record of each request for up to a month, with the IP address, the full user agent, the
+          path and query, and more, and Bitview's operators could read all of it. Nothing of ours does: one script,
+          <a href="https://github.com/bitcoinresearchkit/stats/blob/main/pull.py">pull.py</a>, reads
+          <span id="reads"></span>, plus the zone's DNS names and its tunnels' status, every hour, and publishes only
+          what is marked below.</p>
+        <div><button class="toggle" id="show-fields" type="button" aria-pressed="false">Show Cloudflare's field names</button></div>
+      </header>
+      <div class="panel" id="inventory-list"></div>
+      <details class="table" id="datasets"></details>
     </section>
 
-    <section class="group" aria-labelledby="delivery-title">
-      <h2 id="delivery-title">Delivery</h2>
-      <div class="cards" id="delivery"></div>
+    <section class="section" aria-labelledby="logs-title">
+      <div class="prose">
+        <h2 id="logs-title">Bitview's own logs</h2>
+        <p>Bitview's server logs one line per request: the time, the method, the status, the path with its query, and
+          how long the answer took. No IP address, no user agent, nothing else about who sent it. The lines are kept in
+          daily files that the server deletes after seven days. The last 1,000 lines are public, on the
+          <a href="https://bitview.space/logs/">Logs page</a> and at
+          <a href="https://bitview.space/api/server/logs">/api/server/logs</a>. The MCP server logs only its start.
+          Bitview's <a href="https://bitview.space/privacy/">privacy page</a> says the same.</p>
+
+        <h2 id="defs-title">What these numbers are</h2>
+        <p><b>Source.</b> Cloudflare's own counts of the requests it answered for bitview.space and its subdomains,
+          pulled every hour from its analytics API. Nothing was added to Bitview's pages for them. The one exception is
+          referring sites, which come from Cloudflare Web Analytics, a small script Cloudflare itself adds to Bitview's
+          pages. Days and hours are UTC.</p>
+        <p><b>Exact or estimated.</b> Daily totals, countries, status codes, browsers, content types, HTTP and TLS
+          versions and client reputation count every request, and so do the last three days of hours. Older hours,
+          routes, operating systems, devices, verified bots, cache status, edge locations, origin times, firewall events
+          and referring sites come from Cloudflare's sampled data: on busy days it keeps one request in N and scales
+          up. Those are marked ≈.</p>
+        <p><b>How far back.</b> On Bitview's plan Cloudflare keeps a year of daily totals, six months of Web Analytics,
+          a month of sampled data and three days of exact hours. This page started pulling on Nov 17, 2026 and keeps
+          every day and hour from then on, so daily totals start <span id="from-totals"></span>, hours
+          <span id="from-hours"></span>, referring sites <span id="from-referrers"></span> and the sampled breakdowns
+          <span id="from-sampled"></span>. A day or hour missing from the data is shown as missing, never as zero.</p>
+      </div>
     </section>
-
-  </section>
-
-  <section class="card defs" aria-labelledby="defs-title">
-    <h2 id="defs-title">What these numbers are</h2>
-    <p><b>Source.</b> Cloudflare's own counts of the requests it answered for bitview.space and its subdomains, pulled
-      every hour from its analytics API. Nothing was added to Bitview's pages for them. Days and hours are UTC.</p>
-    <p><b>Referring sites</b> ended on Nov 17, 2026. They came from Cloudflare Web Analytics, a script Cloudflare added
-      to Bitview's pages for visitors outside the EU; it was turned off that day and the counts were deleted.</p>
-    <p><b>Exact or estimated.</b> Daily totals, countries, status codes, browsers, content types, HTTP and TLS versions
-      and client reputation count every request, and so do the last three days of hours. Older hours, routes, operating
-      systems, devices, verified bots, cache status, edge locations, origin times and firewall events
-      come from Cloudflare's sampled data: on busy days it keeps one request in N and scales up. Those are marked ≈.</p>
-    <p><b>How far back.</b> On Bitview's plan Cloudflare keeps a year of daily totals, a
-      month of sampled data and three days of exact hours. This page started pulling on Nov 17, 2026 and keeps every day
-      and hour from then on, so daily totals start <span id="from-totals"></span>, hours <span id="from-hours"></span>
-      and the sampled breakdowns <span id="from-sampled"></span>. A day
-      or hour missing from the data is shown as missing, never as zero.</p>
-  </section>
+  </main>
 
   <footer>
-    <p><a href="https://github.com/bitcoinresearchkit/stats">Data and code</a>, updated once a day.
-      <a href="https://bitview.space/privacy/">Privacy</a>.</p>
+    <a href="https://github.com/bitcoinresearchkit/stats">Data and code</a>
+    <a href="https://bitview.space/privacy/">Privacy</a>
+    <span>Updated every hour</span>
   </footer>
-</main>
+</div>
 <script type="module" src="app.js"></script>
 </body>
 </html>

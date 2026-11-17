@@ -8,14 +8,14 @@
  *   [field: string]: any
  * }} Rec  One stored day or hour; a day's breakdowns are Sampled, an hour's status is plain counts
  * @typedef {Rec & { date: string, hours?: Record<string, Rec> }} Day
- * @template T @typedef {{ counts: T, sampleInterval: number }} Sampled  One stored breakdown; 1 in sampleInterval counted
  * @typedef {{ note: string, approx: boolean }} Coverage
  * @typedef {'sum' | 'avg' | 'ratio'} Total
  * @typedef {{ id: string, label: string, about: string, num: (d: Rec) => number | undefined, den?: (d: Rec) => number | undefined, total: Total, fmt: (n: number) => string, daily?: boolean }} Metric
  * @typedef {{ name: string, color: string, values: (number | null)[] }} Series
- * @typedef {{ labels: string[], when: (i: number) => string, rank: (i: number) => number, series: Series[], fmt: (n: number) => string, height: number, title: string }} ChartSpec
+ * @typedef {{ labels: string[], when: (i: number) => string, rank: (i: number) => number, series: Series[], fmt: (n: number) => string, height: number, title: string, ticks?: number }} ChartSpec
+ *   fmt: values, with ≈ when they are estimates; the axis shows the same numbers without it
  * @typedef {{ key: string, label: string, sub?: string, value: number }} Row
- * @typedef {{ key: string, title: string, group?: string, unit?: string, about?: string, label?: (k: string) => string, limit?: number }} Breakdown
+ * @typedef {{ key: string, title: string, unit?: string, about?: string, label?: (k: string) => string, skip?: (k: string) => boolean }} Breakdown
  * @typedef {{ unit: 'hour' | 'day' | 'week' | 'month', keys: string[], recs: Rec[][], size: number[], label: (i: number) => string, when: (i: number) => string, rank: (i: number) => number }} Buckets  rank: how round a bucket is to label, as midnight over 06:00
  * @typedef {{ what: string, mark: string, how: string, fields: string[], kept: string }} Policy  One row of pull.py's POLICY
  * @typedef {{ scope: string, name: string, kept: string, read: boolean, visitors: boolean, fields: string[] }} Dataset
@@ -34,9 +34,9 @@ const RANGES = /** @type {const} */ ([
 /** A chart takes a range when its stored history covers this share of it: Cloudflare's year of days falls a day short,
  * and its month of firewall events a day short of 30. */
 const COVERED = 0.95;
-const KINDS = /** @type {const} */ ([['API', 'var(--s1)'], ['Pages', 'var(--s2)'], ['MCP', 'var(--s3)']]);
+const KINDS = ['API', 'Pages', 'MCP'];
 const HOME = 'bitview.space';
-const LIST = 10;
+const LIST = 8;
 const HOUR = 36e5;
 
 const compactFormat = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
@@ -67,6 +67,8 @@ function bytes(n) {
 }
 /** @param {(n: number) => string} fmt @param {boolean} approx */
 const estimated = (fmt, approx) => (approx ? (/** @type {number} */ n) => `≈${fmt(n)}` : fmt);
+/** @param {number | null} v @param {(n: number) => string} fmt */
+const cell = (v, fmt) => (v == null ? 'no data' : fmt(v));
 
 /** A Cloudflare name for reading: "searchEngine" -> "Search engine". */
 /** @param {string} s */
@@ -80,23 +82,42 @@ const SOURCES = {
 };
 /** @param {string} k */
 const source = (k) => SOURCES[/** @type {keyof SOURCES} */ (k)] ?? k;
+/** @param {string} code */
+function country(code) {
+  if (code === 'T1') return 'Tor';
+  if (code === 'XX') return 'Unknown';
+  try {
+    return regions.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
 
-/** Every stored daily breakdown, drawn as a ranked list; the ones with a group get their own card there. */
-/** @type {Breakdown[]} */
-const BREAKDOWNS = [
-  { key: 'countries', title: 'Countries', label: (k) => country(k), limit: 10 },
-  { key: 'status', title: 'Status codes', label: (k) => `${k} ${STATUS[/** @type {keyof STATUS} */ (k[0])] ?? ''}`, limit: 10 },
-  { key: 'firewallRules', title: 'Firewall rules', unit: 'Events', label: source, limit: 6 },
-  { key: 'browsers', title: 'Browsers', group: 'visitors', unit: 'Page views' },
-  { key: 'os', title: 'Operating systems', group: 'visitors' },
-  { key: 'devices', title: 'Devices', group: 'visitors', label: words },
-  { key: 'bots', title: 'Verified bots', group: 'visitors', label: (k) => k || 'Not a verified bot' },
-  { key: 'ipClasses', title: 'Client reputation', group: 'visitors', label: words, about: "Cloudflare's class for the client's network." },
-  { key: 'contentTypes', title: 'Content types', group: 'delivery' },
-  { key: 'cache', title: 'Cache status', group: 'delivery', label: words },
-  { key: 'http', title: 'HTTP versions', group: 'delivery' },
-  { key: 'tls', title: 'TLS versions', group: 'delivery' },
-  { key: 'colos', title: 'Cloudflare edge locations', group: 'delivery' },
+/** Every stored daily breakdown, drawn as a ranked list. */
+/** @type {Record<string, Breakdown>} */
+const BREAKDOWNS = Object.fromEntries(/** @type {Breakdown[]} */ ([
+  { key: 'status', title: 'Status codes', label: (k) => `${k} ${STATUS[/** @type {keyof STATUS} */ (k[0])] ?? ''}` },
+  { key: 'firewallRules', title: 'By rule', unit: 'Events', label: source },
+  { key: 'countries', title: 'Countries', label: country },
+  { key: 'colos', title: 'Edge locations', about: "Cloudflare's data centers that answered." },
+  { key: 'referrers', title: 'Referring sites', unit: 'Page loads', label: (k) => k || 'None', skip: (k) => k === HOME || k.endsWith(`.${HOME}`), about: "Pages opened in a browser, Bitview's own links left out." },
+  { key: 'browsers', title: 'Browsers', unit: 'Page views' },
+  { key: 'os', title: 'Systems' },
+  { key: 'devices', title: 'Devices', label: words },
+  { key: 'bots', title: 'Verified bots', label: (k) => k || 'Not a verified bot' },
+  { key: 'ipClasses', title: 'Reputation', label: words, about: "Cloudflare's class for the client's network." },
+  { key: 'contentTypes', title: 'Content' },
+  { key: 'cache', title: 'Cache', label: words },
+  { key: 'http', title: 'HTTP' },
+  { key: 'tls', title: 'TLS' },
+]).map((b) => [b.key, b]));
+/** Breakdown cards: each a title and its tabs. Routes is its own card, with its own controls. */
+const CARDS = [
+  ['Status codes', ['status']],
+  ['Where from', ['countries', 'referrers', 'colos']],
+  ['Browsers and systems', ['browsers', 'os', 'devices']],
+  ['Bots and networks', ['bots', 'ipClasses']],
+  ['Delivery', ['contentTypes', 'cache', 'http', 'tls']],
 ];
 
 /** @type {Metric[]} */
@@ -115,6 +136,8 @@ const METRICS = [
     about: "Bytes Cloudflare sent from its cache: what Bitview's servers didn't have to send." },
 ];
 
+// ------------------------------------------------------------------------------------------------------------- data
+
 // Days are UTC day strings, YYYY-MM-DD; hours are YYYY-MM-DDTHH.
 /** @param {string} day */
 const toDate = (day) => new Date(`${day}T00:00:00Z`);
@@ -124,6 +147,8 @@ const addDays = (day, n) => new Date(toDate(day).getTime() + n * 864e5).toISOStr
 const daysBetween = (a, b) => Math.round((toDate(b).getTime() - toDate(a).getTime()) / 864e5);
 /** @param {Date} t */
 const hourKey = (t) => t.toISOString().slice(0, 13);
+/** @param {number} n */
+const daysWord = (n) => `${n} day${n === 1 ? '' : 's'}`;
 
 /** @param {Rec[]} recs @param {(d: Rec) => number | undefined} f */
 const sum = (recs, f) => recs.reduce((s, d) => s + (f(d) ?? 0), 0);
@@ -162,8 +187,22 @@ const originTime = (recs, q) => {
   return has.length ? sum(has, (d) => d.origin?.[q]) / has.length : null;
 };
 /** Whether any of these records is a sampled estimate. */
-/** @param {Rec[]} recs @param {(d: Rec) => number | undefined} [interval] */
-const sampled = (recs, interval = (d) => d.sampleInterval) => recs.some((d) => (interval(d) ?? 1) > 1.005);
+/** @param {Rec[]} recs */
+const sampled = (recs) => recs.some((d) => (d.sampleInterval ?? 1) > 1.005);
+
+/** @type {Day[]} */
+let final = [];
+/** @type {Map<string, Day>} */
+let byDate = new Map();
+/** @type {Map<string, Rec>} */
+let hours = new Map();
+/** @type {Now} */
+let now;
+/** The first stored day of each daily field, and the first stored hour (YYYY-MM-DDTHH) of each hourly one. */
+/** @type {Map<string, string>} */
+const firstDay = new Map();
+/** @type {Map<string, string>} */
+const firstHour = new Map();
 
 /** Hourly buckets: the `n` hours before `end`, newest last. */
 /** @param {string} end @param {number} n @returns {Buckets} */
@@ -178,7 +217,7 @@ function hourBuckets(end, n) {
     size: keys.map(() => 1),
     label: (i) => (n > 24 && !times[i].getUTCHours() ? dayFormat.format(times[i]) : clockFormat.format(times[i])),
     rank: (i) => 5 - [24, 12, 6, 3, 1].findIndex((h) => times[i].getUTCHours() % h === 0),
-    when: (i) => `${dayFormat.format(times[i])}, ${clockFormat.format(times[i])}–${clockFormat.format(new Date(times[i].getTime() + HOUR))} UTC`,
+    when: (i) => `${dayFormat.format(times[i])}, ${clockFormat.format(times[i])} to ${clockFormat.format(new Date(times[i].getTime() + HOUR))} UTC`,
   };
 }
 
@@ -209,279 +248,7 @@ function dayBuckets(start, end) {
   };
 }
 
-// ---------------------------------------------------------------------------------------------------------------- charts
-
-const SVG = 'http://www.w3.org/2000/svg';
-/** @param {string} tag @param {Record<string, string | number>} attrs @param {Element} [parent] */
-function svg(tag, attrs, parent) {
-  const el = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
-  parent?.append(el);
-  return el;
-}
-/** @param {string} tag @param {string} [className] @param {string} [text] */
-function html(tag, className, text) {
-  const el = document.createElement(tag);
-  if (className) el.className = className;
-  if (text !== undefined) el.textContent = text;
-  return el;
-}
-
-/** A clean axis step for a maximum, so ticks read 0 / 250K / 500K. */
-/** @param {number} max @param {number} steps */
-function niceStep(max, steps) {
-  const raw = max / steps || 1;
-  const p = 10 ** Math.floor(Math.log10(raw));
-  return ([1, 2, 2.5, 5, 10].find((m) => m * p >= raw) ?? 10) * p;
-}
-
-/** @type {WeakMap<HTMLElement, ChartSpec & { width?: number }>} */
-const charts = new WeakMap();
-const resize = new ResizeObserver((entries) => {
-  for (const { target } of entries) {
-    const spec = charts.get(/** @type {HTMLElement} */ (target));
-    if (spec && spec.width !== /** @type {HTMLElement} */ (target).clientWidth) drawChart(/** @type {HTMLElement} */ (target), spec);
-  }
-});
-
-/** A line chart, one y-axis, with a crosshair that snaps to buckets (pointer, touch and arrow keys). */
-/** @param {HTMLElement} el @param {ChartSpec} spec */
-function drawChart(el, spec) {
-  charts.set(el, { ...spec, width: el.clientWidth });
-  resize.observe(el);
-  const { labels, series, fmt, height } = spec;
-  const W = el.clientWidth;
-  const n = labels.length;
-  const all = /** @type {number[]} */ (series.flatMap((s) => s.values).filter((v) => v != null));
-  const step = niceStep(Math.max(0, ...all), 4);
-  const max = Math.max(step, step * Math.ceil(Math.max(0, ...all) / step));
-  const ticks = Array.from({ length: Math.round(max / step) + 1 }, (_, i) => i * step);
-  const left = 8 + Math.max(...ticks.map((t) => fmt(t).length)) * 6.6;
-  const top = 8, bottom = 24, right = 8;
-  const plotW = Math.max(1, W - left - right), plotH = height - top - bottom;
-  /** @param {number} i */
-  const x = (i) => left + (n > 1 ? (i * plotW) / (n - 1) : plotW / 2);
-  /** @param {number} v */
-  const y = (v) => top + plotH * (1 - v / max);
-
-  const root = svg('svg', { width: W, height, viewBox: `0 0 ${W} ${height}`, role: 'img', tabindex: 0, 'aria-label': `${spec.title}. The table below lists every value.` });
-  for (const t of ticks) {
-    svg('line', { x1: left, x2: W - right, y1: y(t), y2: y(t), stroke: t ? 'var(--grid)' : 'var(--axis)', 'stroke-width': 1, 'shape-rendering': 'crispEdges' }, root);
-    svg('text', { x: left - 8, y: y(t) + 4, 'text-anchor': 'end' }, root).textContent = fmt(t);
-  }
-  // Labels on the roundest buckets (midnights, then 12:00, 06:00…) that still give at least half the room's worth,
-  // newest first, none crowding another.
-  const width = Math.max(84, Math.max(...labels.map((l) => l.length)) * 6.6 + 24);
-  const fit = Math.max(2, Math.floor(plotW / width));
-  const indices = Array.from({ length: n }, (_, i) => i);
-  const levels = [...new Set(indices.map(spec.rank))].sort((a, z) => a - z);
-  const level = levels.findLast((l) => indices.filter((i) => spec.rank(i) >= l).length >= Math.min(fit / 2, n)) ?? 0;
-  const round = indices.filter((i) => spec.rank(i) >= level);
-  /** @type {Set<number>} */
-  const shown = new Set();
-  let prior = Infinity;
-  for (const i of round.reverse()) if (prior - x(i) >= width) (shown.add(i), (prior = x(i)));
-  for (const i of shown) {
-    const px = x(i), half = (labels[i].length * 6.6) / 2;
-    const anchor = n === 1 ? 'middle' : px - half < left ? 'start' : px + half > W - right ? 'end' : 'middle';
-    svg('text', { x: x(i), y: height - 6, 'text-anchor': anchor }, root).textContent = labels[i];
-  }
-
-  for (const s of series) {
-    /** @type {[number, number][][]} */
-    const runs = [];
-    s.values.forEach((v, i) => {
-      if (v == null) return;
-      const last = runs.at(-1);
-      if (last && s.values[i - 1] != null) last.push([x(i), y(v)]);
-      else runs.push([[x(i), y(v)]]);
-    });
-    for (const run of runs) {
-      const d = run.map(([px, py], k) => `${k ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`).join('');
-      if (series.length === 1 && run.length > 1)
-        svg('path', { d: `${d}L${run.at(-1)?.[0]},${y(0)}L${run[0][0]},${y(0)}Z`, fill: s.color, 'fill-opacity': 0.1 }, root);
-      svg('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, root);
-      if (run.length === 1) svg('circle', { cx: run[0][0], cy: run[0][1], r: 2.5, fill: s.color }, root);
-    }
-    const lastI = s.values.findLastIndex((v) => v != null);
-    if (lastI >= 0) svg('circle', { cx: x(lastI), cy: y(/** @type {number} */ (s.values[lastI])), r: 4, fill: s.color, stroke: 'var(--surface)', 'stroke-width': 2 }, root);
-  }
-
-  const cross = svg('g', { visibility: 'hidden', 'pointer-events': 'none' }, root);
-  const hair = svg('line', { y1: top, y2: top + plotH, stroke: 'var(--axis)', 'stroke-width': 1 }, cross);
-  const dots = series.map((s) => svg('circle', { r: 4, fill: s.color, stroke: 'var(--surface)', 'stroke-width': 2 }, cross));
-  const tip = html('div', 'tip');
-  tip.hidden = true;
-  let at = -1;
-  /** @param {number} i */
-  const show = (i) => {
-    at = Math.max(0, Math.min(n - 1, i));
-    const px = x(at);
-    hair.setAttribute('x1', String(px));
-    hair.setAttribute('x2', String(px));
-    series.forEach((s, k) => {
-      const v = s.values[at];
-      dots[k].setAttribute('visibility', v == null ? 'hidden' : 'visible');
-      if (v != null) (dots[k].setAttribute('cx', String(px)), dots[k].setAttribute('cy', String(y(v))));
-    });
-    cross.setAttribute('visibility', 'visible');
-    tip.replaceChildren(html('div', 'when', spec.when(at)));
-    for (const s of series) {
-      const row = html('div', 'row');
-      const key = html('span', 'key');
-      key.style.background = s.color;
-      const v = s.values[at];
-      row.append(html('b', '', v == null ? 'no data' : fmt(v)), key, html('span', '', s.name));
-      tip.append(row);
-    }
-    tip.hidden = false;
-    const w = tip.offsetWidth;
-    tip.style.left = `${px + 12 + w > W ? Math.max(0, px - 12 - w) : px + 12}px`;
-  };
-  const hide = () => ((tip.hidden = true), cross.setAttribute('visibility', 'hidden'), (at = -1));
-  root.addEventListener('pointermove', (e) => show(Math.round(((e.offsetX - left) / plotW) * (n - 1))));
-  root.addEventListener('pointerdown', (e) => show(Math.round(((e.offsetX - left) / plotW) * (n - 1))));
-  root.addEventListener('pointerleave', hide);
-  root.addEventListener('blur', hide);
-  root.addEventListener('focus', () => show(n - 1));
-  root.addEventListener('keydown', (e) => {
-    const moves = { ArrowLeft: -1, ArrowRight: 1, Home: -n, End: n };
-    if (e.key in moves) (e.preventDefault(), show((at < 0 ? n - 1 : at) + moves[/** @type {keyof moves} */ (e.key)]));
-    else if (e.key === 'Escape') hide();
-  });
-  el.replaceChildren(root, tip);
-}
-
-/** A chart's table twin: one row per bucket, newest first. */
-/** @param {HTMLDetailsElement} details @param {string[]} heads @param {string[][]} rows */
-function table(details, heads, rows) {
-  const t = html('table');
-  const head = t.createTHead().insertRow();
-  for (const h of heads) head.append(html('th', '', h));
-  const body = t.createTBody();
-  for (const r of rows) {
-    const tr = body.insertRow();
-    for (const c of r) tr.insertCell().textContent = c;
-  }
-  /** @type {HTMLElement} */ (details.querySelector('.scroll')).replaceChildren(t);
-}
-
-/** A legend: a key per series, with a value. */
-/** @param {HTMLElement} el @param {{ name: string, color: string, value: string }[]} items */
-function legend(el, items) {
-  el.replaceChildren(
-    ...items.map((s) => {
-      const item = html('span');
-      const key = html('span', 'key');
-      key.style.background = s.color;
-      item.append(key, `${s.name}: ${s.value}`);
-      return item;
-    }),
-  );
-}
-
-/** A ranked list: name over a share bar, value, share; the first few, then all. */
-/** @type {Set<string>} */
-const expanded = new Set();
-/** @param {HTMLElement} el @param {Row[]} rows @param {(n: number) => string} fmt @param {string} valueHead @param {number} [limit] */
-function rankList(el, rows, fmt, valueHead, limit = LIST) {
-  rows.sort((a, b) => b.value - a.value);
-  const total = rows.reduce((s, r) => s + r.value, 0);
-  const top = rows[0]?.value || 1;
-  const open = expanded.has(el.id);
-  const head = html('div', 'rank-head');
-  head.append(html('span', '', rows.length ? `${rows.length} in all` : 'No data in this range'), html('span', '', valueHead), html('span', '', 'Share'));
-  const list = html('ol', 'rank');
-  for (const r of open ? rows : rows.slice(0, limit)) {
-    const li = html('li');
-    const name = html('span', 'name');
-    name.style.setProperty('--w', `${(r.value / top) * 100}%`);
-    if (r.sub) name.append(html('small', '', r.sub));
-    name.append(r.label);
-    li.append(name, html('span', 'v', fmt(r.value)), html('span', 's', pct(total ? r.value / total : 0)));
-    list.append(li);
-  }
-  const parts = [head, list];
-  if (rows.length > limit) {
-    const more = html('button', 'more', open ? 'Show fewer' : `Show all ${rows.length}`);
-    more.setAttribute('aria-expanded', String(open));
-    more.addEventListener('click', () => {
-      open ? expanded.delete(el.id) : expanded.add(el.id);
-      rankList(el, rows, fmt, valueHead, limit);
-    });
-    parts.push(more);
-  }
-  el.replaceChildren(...parts);
-}
-
-/** A row of toggle buttons; the pressed one is the current choice. */
-/** @param {HTMLElement} el @param {[string, string][]} options @param {string} current @param {(id: string) => void} pick */
-function segmented(el, options, current, pick) {
-  el.replaceChildren(
-    ...options.map(([id, label]) => {
-      const b = html('button', '', label);
-      b.type = 'button';
-      b.setAttribute('aria-pressed', String(id === current));
-      b.addEventListener('click', () => pick(id));
-      return b;
-    }),
-  );
-}
-
-// ------------------------------------------------------------------------------------------------------------------ page
-
-/** @param {string} id */
-const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
-const params = new URLSearchParams(location.search);
-const state = {
-  range: RANGES.some(([id]) => id === params.get('range')) ? /** @type {string} */ (params.get('range')) : '24h',
-  metric: METRICS.some((m) => m.id === params.get('metric')) ? /** @type {string} */ (params.get('metric')) : 'requests',
-  kind: 'All',
-  by: 'requests',
-};
-
-/** @type {Day[]} */
-let days = [];
-/** @type {Map<string, Day>} */
-let byDate = new Map();
-/** @type {Map<string, Rec>} */
-let hours = new Map();
-/** @type {Now} */
-let now;
-
-/** @param {string} code */
-function country(code) {
-  if (code === 'T1') return 'Tor';
-  if (code === 'XX') return 'Unknown';
-  try {
-    return regions.of(code) ?? code;
-  } catch {
-    return code;
-  }
-}
-
-/** Splits a stored route key into its host (left out for the main site) and path. */
-/** @param {string} key */
-function route(key) {
-  const slash = key.indexOf('/');
-  const host = key.slice(0, slash);
-  return { sub: host === HOME ? undefined : host, label: key.slice(slash) };
-}
-
-/** The first stored day of each daily field, and the first stored hour (YYYY-MM-DDTHH) of each hourly one. */
-/** @type {Map<string, string>} */
-const firstDay = new Map();
-/** @type {Map<string, string>} */
-const firstHour = new Map();
-/** Days whose totals are final, oldest first. */
-/** @type {Day[]} */
-let final = [];
-
-/** A day count in words. */
-/** @param {number} n */
-const daysWord = (n) => `${n} day${n === 1 ? '' : 's'}`;
-
-/** What a stored breakdown covers over some days: from when it's kept, the days it misses since, how sampled it was. */
+/** What a stored breakdown covers over some days: the days it misses since it's kept, and how sampled it was. */
 /** @param {string} key @param {Day[]} range @param {string} start @param {string} last @returns {Coverage} */
 function coverage(key, range, start, last) {
   const from = firstDay.get(key);
@@ -495,73 +262,6 @@ function coverage(key, range, start, last) {
     approx && `≈ Estimates: Cloudflare counted as few as 1 in ${decimalFormat.format(worst)} on some days.`,
   ];
   return { note: notes.filter(Boolean).join(' '), approx };
-}
-
-/**
- * The checks an operator opens Cloudflare's dashboard for, over the last 24 hours against the 7 days before: a check
- * is off when its value passes `limit` and, when it has one, `times` its usual level. Each says what it reads.
- * @type {{ label: string, read: (hs: Rec[]) => number | null, fmt: (n: number) => string, limit: number, times?: number, low?: boolean, about: string }[]}
- */
-const CHECKS = [
-  { label: "Couldn't reach Bitview", read: (hs) => statusShare(hs, unreachable), fmt: finePct, limit: 0.002, times: 3,
-    about: "Requests Cloudflare couldn't pass to Bitview's servers (502, 504, 52x). Off above 0.2% and 3× usual." },
-  { label: 'Server errors (5xx)', read: (hs) => statusShare(hs, (k) => k[0] === '5'), fmt: finePct, limit: 0.005, times: 3,
-    about: 'Off above 0.5% of requests and 3× usual.' },
-  { label: 'Client errors (4xx)', read: (hs) => statusShare(hs, (k) => k[0] === '4'), fmt: pct, limit: 0.1, times: 2,
-    about: 'Mostly scanners and mistyped addresses. Off above 10% and 2× usual.' },
-  { label: 'Origin time, 95th pct', read: (hs) => originTime(hs, 'p95'), fmt: ms, limit: 1000, times: 2,
-    about: "How long Bitview's servers took for the slowest 5% of requests. Off above 1 s and 2× usual." },
-  { label: 'Firewall events a day', read: (hs) => (having(hs, firewallOf).length ? (sum(hs, firewallOf) / having(hs, firewallOf).length) * 24 : null), fmt: count, limit: 1000, times: 5,
-    about: 'Requests a Cloudflare security feature acted on. Off above 1,000 a day and 5× usual.' },
-  { label: 'Served from cache', read: (hs) => measure(/** @type {Metric} */ (METRICS.find((m) => m.id === 'cache')), hs), fmt: pct, limit: 0.05, times: 0.5, low: true,
-    about: 'Off below half its usual share, or 5%.' },
-];
-
-/** The at-a-glance strip: every check, the tunnels and the pull, with a headline saying whether anything is off. */
-function glance() {
-  const last24 = hourBuckets(now.through, 24).recs.flat();
-  const before = hourBuckets(new Date(new Date(now.through).getTime() - 24 * HOUR).toISOString(), 168).recs.flat();
-  /** @type {{ label: string, value: string, off: boolean, about: string }[]} */
-  const items = CHECKS.map((c) => {
-    const v = c.read(last24), usual = c.read(before);
-    const scaled = usual == null || !c.times ? true : c.low ? v != null && v < usual * c.times : v != null && v > usual * c.times;
-    const off = v != null && (c.low ? v < c.limit || scaled : v > c.limit && scaled);
-    const value = v == null ? 'no data' : c.fmt(v) + (usual == null ? '' : ` · usual ${c.fmt(usual)}`);
-    return { label: c.label, value, off, about: c.about };
-  });
-  const serving = now.tunnels.filter((t) => t.public);
-  const down = serving.filter((t) => t.status !== 'healthy');
-  items.unshift({
-    label: 'Tunnels to Bitview',
-    value: down.length ? `${down.length} of ${serving.length} not healthy: ${down.map((t) => `${t.hosts.join(', ')} (${t.status})`).join('; ')}` : `All ${serving.length} healthy`,
-    off: down.length > 0,
-    about: `Cloudflare's status, at the last pull, for each tunnel serving a host Bitview's home page names. Tunnels to development hosts are listed below but don't count.`,
-  });
-  const age = (Date.now() - new Date(now.pulled).getTime()) / HOUR;
-  items.push({
-    label: 'This page',
-    value: `Pulled ${clockFormat.format(new Date(now.pulled))} UTC${age >= 1 ? `, ${Math.floor(age)} h ago` : ''}`,
-    off: age > 3,
-    about: 'Pulled from Cloudflare every hour. Off when the last pull is over 3 hours old.',
-  });
-  const off = items.filter((i) => i.off);
-  $('glance-title').textContent = off.length ? `${off.length} thing${off.length > 1 ? 's' : ''} to look at` : 'All fine';
-  $('glance').dataset.off = String(off.length > 0);
-  $('glance-sub').textContent = `The last 24 hours, to ${clockFormat.format(new Date(now.through))} UTC, against the 7 days before.`;
-  $('checks').replaceChildren(
-    ...[...off, ...items.filter((i) => !i.off)].map((i) => {
-      const li = html('li');
-      li.dataset.off = String(i.off);
-      const mark = html('span', 'mark', i.off ? '!' : '✓');
-      mark.setAttribute('aria-hidden', 'true');
-      const text = html('div');
-      text.append(html('span', 'label', i.label), html('span', 'value', `${i.off ? 'Off: ' : ''}${i.value}`));
-      li.append(mark, text);
-      return li;
-    }),
-  );
-  /** @type {HTMLElement} */ ($('judged').querySelector('dl')).replaceChildren(...items.flatMap((i) => [html('dt', '', i.label), html('dd', '', i.about)]));
-  table(/** @type {HTMLDetailsElement} */ ($('tunnels')), ['Serves', 'Public', 'Status', 'Connections'], now.tunnels.map((t) => [t.hosts.join(', '), t.public ? 'yes' : 'no, development', t.status, String(t.connections)]));
 }
 
 /** Whether a field's stored history covers a range: its days, or its hours for an hourly range. */
@@ -597,30 +297,374 @@ function frame(dayKey, hourKey = dayKey) {
   return { range, b, prev, start, last, listDays: final.filter((d) => d.date >= start), note };
 }
 
-/** Bucket helpers for one frame: names, chart specs and table rows, saying how many hours or days hold data. */
+/** Bucket helpers for one frame: chart specs and table rows, saying how many hours or days hold data. */
 /** @param {Frame} f */
 function framed(f) {
   const { b } = f;
   const word = b.unit === 'hour' ? 'hour' : 'day';
-  /** @param {Buckets} bk @param {number} i @param {(d: Rec) => unknown} has */
-  const whenOf = (bk, i, has) => {
-    const n = bk.recs[i].filter((d) => has(d) != null).length, of = bk.size[i];
-    return bk.when(i) + (n === of ? '' : n ? ` · ${n} of ${of} ${word}s` : ' · no data');
+  /** @param {number} i @param {(d: Rec) => unknown} has */
+  const whenOf = (i, has) => {
+    const n = b.recs[i].filter((d) => has(d) != null).length, of = b.size[i];
+    return b.when(i) + (n === of ? '' : n ? `, ${n} of ${of} ${word}s` : ', no data');
   };
   return {
-    word,
-    unitNote: b.unit === 'hour' ? ' an hour' : b.unit === 'day' ? ' a day' : ` a day · ${b.unit}ly averages`,
+    unitNote: b.unit === 'hour' ? ' an hour' : b.unit === 'day' ? ' a day' : ` a day, ${b.unit}ly averages`,
     head: { hour: 'Hour', day: 'Day', week: 'Week of', month: 'Month' }[b.unit],
     /** @param {Omit<ChartSpec, 'labels' | 'when' | 'rank'>} chart @param {(d: Rec) => unknown} has @returns {ChartSpec} */
-    over: (chart, has) => ({ labels: b.keys.map((_, i) => b.label(i)), when: (i) => whenOf(b, i, has), rank: b.rank, ...chart }),
+    over: (chart, has) => ({ labels: b.keys.map((_, i) => b.label(i)), when: (i) => whenOf(i, has), rank: b.rank, ...chart }),
     /** Table rows, newest first. */
     /** @param {(d: Rec) => unknown} has @param {((i: number) => string)[]} cols */
-    rows: (has, cols) => b.keys.map((_, i) => [whenOf(b, i, has), ...cols.map((c) => c(i))]).reverse(),
+    rows: (has, cols) => b.keys.map((_, i) => [whenOf(i, has), ...cols.map((c) => c(i))]).reverse(),
   };
 }
 
-/** @param {number | null} v @param {(n: number) => string} fmt */
-const cell = (v, fmt) => (v == null ? 'no data' : fmt(v));
+// ---------------------------------------------------------------------------------------------------------- drawing
+
+/** @param {string} id */
+const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
+/** @param {string} tag @param {string} [className] @param {string} [text] */
+function html(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+const SVG = 'http://www.w3.org/2000/svg';
+/** @param {string} tag @param {Record<string, string | number>} attrs @param {Element} [parent] */
+function svg(tag, attrs, parent) {
+  const el = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  parent?.append(el);
+  return el;
+}
+
+/** The page's few icons, as 24-unit stroke paths. */
+const ICONS = {
+  ok: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM8.5 12.2l2.4 2.3 4.6-4.9',
+  off: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7.8v5M12 16.2v.1',
+  hidden: 'M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.2A9.8 9.8 0 0 1 12 5c5 0 8.5 4.5 9.5 7a13 13 0 0 1-2.4 3.4M6.6 6.6C4.4 8 3 10.2 2.5 12c1 2.5 4.5 7 9.5 7 1.7 0 3.2-.5 4.5-1.2',
+  grouped: 'M4 6h16M7 12h10M10 18h4',
+  published: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  chevron: 'M9 6l6 6-6 6',
+};
+/** @param {keyof ICONS} name @param {Element} [into] An existing <svg> to fill, else a new one */
+function icon(name, into) {
+  const el = into ?? svg('svg', { class: 'icon', viewBox: '0 0 24 24', 'aria-hidden': 'true' });
+  el.replaceChildren(svg('path', { d: ICONS[name] }));
+  return el;
+}
+
+/** Text width at the chart size, for laying out axis labels. */
+const measurer = /** @type {CanvasRenderingContext2D} */ (document.createElement('canvas').getContext('2d'));
+/** @param {string} s */
+const textWidth = (s) => measurer.measureText(s).width;
+
+/** A clean axis step for a maximum, so ticks read 0 / 250K / 500K. */
+/** @param {number} max @param {number} steps */
+function niceStep(max, steps) {
+  const raw = max / steps || 1;
+  const p = 10 ** Math.floor(Math.log10(raw));
+  return ([1, 2, 2.5, 5, 10].find((m) => m * p >= raw) ?? 10) * p;
+}
+
+/** @type {WeakMap<HTMLElement, ChartSpec & { width: number }>} */
+const charts = new WeakMap();
+const resize = new ResizeObserver((entries) => {
+  for (const { target } of entries) {
+    const el = /** @type {HTMLElement} */ (target), spec = charts.get(el);
+    if (spec && spec.width !== el.clientWidth) drawChart(el, spec);
+  }
+});
+
+/** A line chart on one y-axis, the first series filled when it stands alone, with a crosshair that snaps to buckets
+ * (pointer, touch and arrow keys) and one tooltip listing every series. */
+/** @param {HTMLElement} el @param {ChartSpec} spec */
+function drawChart(el, spec) {
+  const W = el.clientWidth;
+  charts.set(el, { ...spec, width: W });
+  resize.observe(el);
+  const { labels, series, fmt, height } = spec;
+  const n = labels.length;
+  const all = /** @type {number[]} */ (series.flatMap((s) => s.values).filter((v) => v != null));
+  const top = Math.max(0, ...all);
+  const step = niceStep(top, spec.ticks ?? 4);
+  const max = Math.max(step, step * Math.ceil(top / step));
+  const ticks = Array.from({ length: Math.round(max / step) + 1 }, (_, i) => i * step);
+  const tick = (/** @type {number} */ t) => fmt(t).replace('≈', '');
+  const left = 8 + Math.max(...ticks.map((t) => textWidth(tick(t))));
+  const pad = 8, bottom = 24, right = 4;
+  const plotW = Math.max(1, W - left - right), plotH = height - pad - bottom;
+  /** @param {number} i */
+  const x = (i) => left + (n > 1 ? (i * plotW) / (n - 1) : plotW / 2);
+  /** @param {number} v */
+  const y = (v) => pad + plotH * (1 - v / max);
+
+  const root = svg('svg', { width: W, height, viewBox: `0 0 ${W} ${height}`, role: 'img', tabindex: 0, 'aria-label': `${spec.title}. The table lists every value.` });
+  for (const t of ticks) {
+    svg('line', { x1: left, x2: W - right, y1: y(t), y2: y(t), stroke: t ? 'var(--line)' : 'var(--line2)', 'shape-rendering': 'crispEdges' }, root);
+    svg('text', { x: left - 8, y: y(t) + 4, 'text-anchor': 'end' }, root).textContent = tick(t);
+  }
+  // Labels on the roundest buckets (midnights, then 12:00, 06:00…) that fill about half the room, newest first,
+  // none crowding another.
+  const gap = 24 + Math.max(...labels.map(textWidth));
+  const fit = Math.max(2, Math.floor(plotW / gap));
+  const indices = Array.from({ length: n }, (_, i) => i);
+  const levels = [...new Set(indices.map(spec.rank))].sort((a, z) => a - z);
+  const level = levels.findLast((l) => indices.filter((i) => spec.rank(i) >= l).length >= Math.min(fit / 2, n)) ?? 0;
+  let prior = Infinity;
+  for (const i of indices.filter((i) => spec.rank(i) >= level).reverse()) {
+    if (prior - x(i) < gap) continue;
+    prior = x(i);
+    const half = textWidth(labels[i]) / 2;
+    const anchor = n === 1 ? 'middle' : x(i) - half < left ? 'start' : x(i) + half > W - right ? 'end' : 'middle';
+    svg('text', { x: x(i), y: height - 6, 'text-anchor': anchor }, root).textContent = labels[i];
+  }
+
+  const fill = series.filter((s) => s.color !== 'var(--spark)').length === 1;
+  for (const s of series) {
+    /** @type {[number, number][][]} */
+    const runs = [];
+    s.values.forEach((v, i) => {
+      if (v == null) return;
+      if (s.values[i - 1] != null) runs.at(-1)?.push([x(i), y(v)]);
+      else runs.push([[x(i), y(v)]]);
+    });
+    const muted = s.color === 'var(--spark)';
+    for (const run of runs) {
+      const d = run.map(([px, py], k) => `${k ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`).join('');
+      if (fill && !muted && run.length > 1)
+        svg('path', { d: `${d}L${run.at(-1)?.[0]},${y(0)}L${run[0][0]},${y(0)}Z`, fill: s.color, 'fill-opacity': 0.08 }, root);
+      svg('path', { d, fill: 'none', stroke: s.color, 'stroke-width': muted ? 1.5 : 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, root);
+      if (run.length === 1) svg('circle', { cx: run[0][0], cy: run[0][1], r: 2.5, fill: s.color }, root);
+    }
+  }
+
+  const cross = svg('g', { visibility: 'hidden', 'pointer-events': 'none' }, root);
+  const hair = svg('line', { y1: pad, y2: pad + plotH, stroke: 'var(--line2)' }, cross);
+  const dots = series.map((s) => svg('circle', { r: 4, fill: s.color, stroke: 'var(--panel)', 'stroke-width': 2 }, cross));
+  const tip = html('div', 'tip');
+  tip.hidden = true;
+  let at = -1;
+  /** @param {number} i */
+  const show = (i) => {
+    at = Math.max(0, Math.min(n - 1, i));
+    const px = x(at);
+    hair.setAttribute('x1', String(px));
+    hair.setAttribute('x2', String(px));
+    tip.replaceChildren(html('div', 'when', spec.when(at)));
+    series.forEach((s, k) => {
+      const v = s.values[at];
+      dots[k].setAttribute('visibility', v == null ? 'hidden' : 'visible');
+      if (v != null) (dots[k].setAttribute('cx', String(px)), dots[k].setAttribute('cy', String(y(v))));
+      const row = html('div', 'row');
+      const key = html('span', 'key');
+      key.style.background = s.color;
+      row.append(key, html('b', '', cell(v, fmt)), html('span', '', s.name));
+      tip.append(row);
+    });
+    cross.setAttribute('visibility', 'visible');
+    tip.hidden = false;
+    const w = tip.offsetWidth;
+    tip.style.left = `${px + 12 + w > W ? Math.max(0, px - 12 - w) : px + 12}px`;
+  };
+  const hide = () => ((tip.hidden = true), cross.setAttribute('visibility', 'hidden'), (at = -1));
+  /** @param {PointerEvent} e */
+  const point = (e) => show(Math.round(((e.offsetX - left) / plotW) * (n - 1)));
+  root.addEventListener('pointermove', point);
+  root.addEventListener('pointerdown', point);
+  root.addEventListener('pointerleave', hide);
+  root.addEventListener('blur', hide);
+  root.addEventListener('focus', () => show(n - 1));
+  root.addEventListener('keydown', (e) => {
+    const moves = { ArrowLeft: -1, ArrowRight: 1, Home: -n, End: n };
+    if (e.key in moves) (e.preventDefault(), show((at < 0 ? n - 1 : at) + moves[/** @type {keyof moves} */ (e.key)]));
+    else if (e.key === 'Escape') hide();
+  });
+  el.replaceChildren(root, tip);
+}
+
+/** A sparkline: the last `recent` points in the accent, the ones before in grey. Decorative: its numbers are beside it. */
+/** @param {(number | null)[]} values @param {number} recent */
+function sparkline(values, recent) {
+  const W = 72, H = 20, n = values.length;
+  const max = Math.max(...values.map((v) => v ?? 0)) || 1;
+  const root = svg('svg', { class: 'spark', viewBox: `0 0 ${W} ${H}`, 'aria-hidden': 'true' });
+  /** @param {number} from @param {number} to @param {string} color */
+  const line = (from, to, color) => {
+    const d = values.slice(from, to).map((v, k) => (v == null ? '' : `${k && values[from + k - 1] != null ? 'L' : 'M'}${(((from + k) / (n - 1)) * W).toFixed(1)},${(H - 1 - (v / max) * (H - 2)).toFixed(1)}`)).join('');
+    if (d) svg('path', { d, fill: 'none', stroke: color, 'stroke-width': 1.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, root);
+  };
+  line(0, n - recent + 1, 'var(--spark)');
+  line(n - recent, n, 'var(--s1)');
+  return root;
+}
+
+/** A chart's table twin, in a closed disclosure: one row per bucket, newest first. */
+/** @param {HTMLElement} details @param {string[]} heads @param {string[][]} rows */
+function table(details, heads, rows) {
+  const summary = html('summary');
+  summary.append(icon('chevron'), 'Table');
+  const t = html('table');
+  const head = /** @type {HTMLTableElement} */ (t).createTHead().insertRow();
+  for (const h of heads) head.append(html('th', '', h));
+  const body = /** @type {HTMLTableElement} */ (t).createTBody();
+  for (const r of rows) {
+    const tr = body.insertRow();
+    for (const c of r) tr.insertCell().textContent = c;
+  }
+  const scroll = html('div', 'scroll');
+  scroll.append(t);
+  details.replaceChildren(summary, scroll);
+}
+
+/** A row of toggle buttons; the pressed one is the current choice. */
+/** @param {HTMLElement} el @param {[string, string][]} options @param {string} current @param {(id: string) => void} pick */
+function choices(el, options, current, pick) {
+  el.replaceChildren(
+    ...options.map(([id, label]) => {
+      const b = html('button', '', label);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(id === current));
+      b.addEventListener('click', () => pick(id));
+      return b;
+    }),
+  );
+}
+
+/** A ranked list: name over a bar of its share of the top one, value, share of all; the first few, then all. */
+/** @type {Set<string>} */
+const expanded = new Set();
+/** @param {HTMLElement} el @param {string} id @param {Row[]} rows @param {(n: number) => string} fmt @param {string} valueHead */
+function rankList(el, id, rows, fmt, valueHead) {
+  rows.sort((a, b) => b.value - a.value);
+  if (!rows.length) return el.replaceChildren(html('p', 'empty', 'No data in this range.'));
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  const open = expanded.has(id);
+  const head = html('div', 'rank-head');
+  head.append(html('span', '', `${rows.length} in all`), html('span', '', valueHead), html('span', '', 'Share'));
+  const list = html('ol', 'rank');
+  for (const r of open ? rows : rows.slice(0, LIST)) {
+    const li = html('li');
+    const name = html('span', 'name');
+    name.style.setProperty('--w', `${(r.value / rows[0].value) * 100}%`);
+    if (r.sub) name.append(html('small', '', r.sub));
+    name.append(r.label);
+    li.append(name, html('span', 'v', fmt(r.value)), html('span', 's', pct(total ? r.value / total : 0)));
+    list.append(li);
+  }
+  el.replaceChildren(head, list);
+  if (rows.length > LIST) {
+    const more = html('button', 'more', open ? 'Show fewer' : `Show all ${rows.length}`);
+    more.setAttribute('aria-expanded', String(open));
+    more.addEventListener('click', () => {
+      open ? expanded.delete(id) : expanded.add(id);
+      rankList(el, id, rows, fmt, valueHead);
+    });
+    el.append(more);
+  }
+}
+
+/** One breakdown summed over its own frame's days, with what its numbers cover. */
+/** @param {Breakdown} bd */
+function tally(bd) {
+  const f = frame(bd.key, null);
+  const cover = coverage(bd.key, f.listDays, f.start, f.last);
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const d of f.listDays) for (const [k, v] of Object.entries(d[bd.key]?.counts ?? {})) if (!bd.skip?.(k)) counts.set(k, (counts.get(k) ?? 0) + v);
+  return { counts, fmt: estimated(count, cover.approx), notes: [bd.about, f.note, cover.note] };
+}
+
+// ------------------------------------------------------------------------------------------------------------- page
+
+const params = new URLSearchParams(location.search);
+const state = {
+  range: RANGES.some(([id]) => id === params.get('range')) ? /** @type {string} */ (params.get('range')) : '24h',
+  metric: METRICS.some((m) => m.id === params.get('metric')) ? /** @type {string} */ (params.get('metric')) : 'requests',
+  kind: 'All',
+  by: 'requests',
+  /** @type {Record<string, string>} The open tab of each breakdown card */
+  tabs: Object.fromEntries(CARDS.map(([title, keys]) => [title, keys[0]])),
+};
+
+/**
+ * The checks an operator opens Cloudflare's dashboard for, over the last 24 hours against the 7 days before: a check
+ * is off when its value passes `limit` and, when it has one, `times` its usual level. Each says what it reads.
+ * @type {{ label: string, read: (hs: Rec[]) => number | null, fmt: (n: number) => string, limit: number, times?: number, low?: boolean, about: string }[]}
+ */
+const CHECKS = [
+  { label: "Couldn't reach Bitview", read: (hs) => statusShare(hs, unreachable), fmt: finePct, limit: 0.002, times: 3,
+    about: "Requests Cloudflare couldn't pass to Bitview's servers (502, 504, 52x). Off above 0.2% and 3× usual." },
+  { label: 'Server errors (5xx)', read: (hs) => statusShare(hs, (k) => k[0] === '5'), fmt: finePct, limit: 0.005, times: 3,
+    about: 'Off above 0.5% of requests and 3× usual.' },
+  { label: 'Client errors (4xx)', read: (hs) => statusShare(hs, (k) => k[0] === '4'), fmt: pct, limit: 0.1, times: 2,
+    about: 'Mostly scanners and mistyped addresses. Off above 10% and 2× usual.' },
+  { label: 'Origin time, 95th pct', read: (hs) => originTime(hs, 'p95'), fmt: ms, limit: 1000, times: 2,
+    about: "How long Bitview's servers took for the slowest 5% of requests. Off above 1 s and 2× usual." },
+  { label: 'Firewall events a day', read: (hs) => (having(hs, firewallOf).length ? (sum(hs, firewallOf) / having(hs, firewallOf).length) * 24 : null), fmt: count, limit: 1000, times: 5,
+    about: 'Requests a Cloudflare security feature acted on. Off above 1,000 a day and 5× usual.' },
+  { label: 'Served from cache', read: (hs) => measure(/** @type {Metric} */ (METRICS.find((m) => m.id === 'cache')), hs), fmt: pct, limit: 0.05, times: 0.5, low: true,
+    about: 'Off below half its usual share, or 5%.' },
+];
+
+/** The status card: a verdict, then every check with its last week by hour, the tunnels and the pull. */
+function status() {
+  const recent = hourBuckets(now.through, 24).recs.flat();
+  const week = hourBuckets(now.through, 192).recs;
+  const before = week.slice(0, 168).flat();
+  /** @type {{ label: string, value: string, usual: string, off: boolean, about: string, spark?: (number | null)[], extra?: HTMLElement }[]} */
+  const items = CHECKS.map((c) => {
+    const v = c.read(recent), usual = c.read(before);
+    const scaled = usual == null || !c.times ? true : c.low ? v != null && v < usual * c.times : v != null && v > usual * c.times;
+    const off = v != null && (c.low ? v < c.limit || scaled : v > c.limit && scaled);
+    return { label: c.label, value: cell(v, c.fmt), usual: usual == null ? '' : `usual ${c.fmt(usual)}`, off, about: c.about, spark: week.map((h) => c.read(h)) };
+  });
+  const serving = now.tunnels.filter((t) => t.public);
+  const down = serving.filter((t) => t.status !== 'healthy');
+  const tunnels = html('details', 'table');
+  table(tunnels, ['Serves', 'Public', 'Status', 'Connections'], now.tunnels.map((t) => [t.hosts.join(', '), t.public ? 'yes' : 'no, development', t.status, String(t.connections)]));
+  items.unshift({
+    label: 'Tunnels to Bitview',
+    value: down.length ? `${down.length} of ${serving.length} down: ${down.map((t) => `${t.hosts.join(', ')} (${t.status})`).join('; ')}` : `${serving.length} of ${serving.length} healthy`,
+    usual: '',
+    off: down.length > 0,
+    about: "Cloudflare's status, at the last pull, for each tunnel serving a host Bitview's home page names. Tunnels to development hosts are listed here but don't count.",
+    extra: tunnels,
+  });
+  const age = (Date.now() - new Date(now.pulled).getTime()) / HOUR;
+  const pulled = `${clockFormat.format(new Date(now.pulled))} UTC`;
+  items.push({
+    label: 'This page',
+    value: age >= 1 ? `${Math.floor(age)} h old` : 'Up to date',
+    usual: `pulled ${pulled}`,
+    off: age > 3,
+    about: 'Pulled from Cloudflare every hour. Off when the last pull is over 3 hours old.',
+  });
+  const off = items.filter((i) => i.off);
+  $('updated').textContent = `Updated ${pulled}`;
+  $('verdict').textContent = off.length ? `${off.length} thing${off.length > 1 ? 's' : ''} to look at` : 'All fine';
+  icon(off.length ? 'off' : 'ok', $('verdict-icon'));
+  $('status').dataset.off = String(off.length > 0);
+  $('verdict-sub').textContent = `The last 24 hours, to ${clockFormat.format(new Date(now.through))} UTC, against the 7 days before. Tap a check for how it's judged.`;
+  $('checks').replaceChildren(
+    ...[...off, ...items.filter((i) => !i.off)].map((i) => {
+      const li = html('li');
+      li.dataset.off = String(i.off);
+      const details = html('details');
+      const summary = html('summary');
+      const val = html('span', 'val');
+      val.append(html('span', '', i.value));
+      if (i.usual) val.append(html('span', 'usual', i.usual));
+      if (i.spark) val.append(sparkline(i.spark, 24));
+      summary.append(icon(i.off ? 'off' : 'ok'), html('span', 'label', i.label), val);
+      const about = html('div', 'about', `${i.off ? 'Off now. ' : ''}${i.about}`);
+      if (i.extra) about.append(i.extra);
+      details.append(summary, about);
+      li.append(details);
+      return li;
+    }),
+  );
+}
 
 function render() {
   const url = new URL(location.href);
@@ -629,37 +673,52 @@ function render() {
   history.replaceState(null, '', url);
 
   // The range control offers what the longest-kept chart, the daily totals, covers.
-  const offered = RANGES.filter((r) => covers(r, 'requests', 'requests'));
-  if (!offered.some(([id]) => id === state.range)) state.range = '24h';
-  segmented($('ranges'), offered.map(([id, label]) => [id, label]), state.range, (id) => ((state.range = id), render()));
+  const offered = RANGES.filter((r) => covers(r, 'requests', 'requests')).map(([id]) => id);
+  if (!offered.includes(state.range)) state.range = '24h';
+  for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ ($('ranges').querySelectorAll('button'))) {
+    b.hidden = !offered.includes(b.value);
+    b.setAttribute('aria-pressed', String(b.value === state.range));
+    b.onclick = () => ((state.range = b.value), render());
+  }
 
+  overview();
+  kinds();
+  errors();
+  speed();
+  firewall();
+  cards();
+}
+
+/** The headline numbers, each a tab of the main chart, which draws the period before in grey. */
+function overview() {
   const main = frame('requests');
   const { b, prev } = main;
   const [, , length, hourly] = main.range;
-  const { word, unitNote, head: bucketHead, over, rows } = framed(main);
+  const { unitNote, head, over, rows } = framed(main);
   const recs = b.recs.flat();
   const missing = b.size.reduce((s, n) => s + n, 0) - recs.length;
+  const word = b.unit === 'hour' ? 'hour' : 'day';
   const span = length || daysBetween(main.start, main.last) + 1;
-  const listWhen = (/** @type {Frame} */ f) => (f.listDays.length === 1 ? longDayFormat.format(toDate(f.listDays[0].date)) : `${longDayFormat.format(toDate(f.start))} to ${longDayFormat.format(toDate(f.last))}`);
+  const period = length === 1 ? '24 hours' : `${span} days`;
+  const through = new Date(now.through);
   $('through').textContent = hourly
-    ? `Charts: the last ${length === 1 ? '24 hours' : '7 days'} by hour, to ${dayFormat.format(new Date(now.through))} ${clockFormat.format(new Date(now.through))} UTC${missing ? ` · ${missing} hours missing` : ''}. Lists: ${listWhen(main)}, by day.`
-    : `${listWhen(main)}, UTC${missing ? ` · ${daysWord(missing)} missing` : ''}. A chart with less history shows what it has, and says so.`;
+    ? `The last ${period} by hour, to ${dayFormat.format(through)}, ${clockFormat.format(through)} UTC${missing ? `, ${missing} hours missing` : ''}. Lists cover ${main.listDays.length === 1 ? longDayFormat.format(toDate(main.listDays[0].date)) : `${dayFormat.format(toDate(main.start))} to ${dayFormat.format(toDate(main.last))}`}, by day. Changes compare with the ${period} before.`
+    : `${longDayFormat.format(toDate(main.start))} to ${longDayFormat.format(toDate(main.last))}, UTC${missing ? `, ${daysWord(missing)} missing` : ''}. A chart with less history shows what it has, and says so.`;
 
-  // Headline numbers, each a button that picks the main chart.
   const metrics = METRICS.filter((m) => !(hourly && m.daily));
   if (!metrics.some((m) => m.id === state.metric)) state.metric = 'requests';
-  const approxTotals = sampled(recs);
+  const approx = sampled(recs);
+  const before = prev?.recs.flat() ?? [];
   $('kpis').replaceChildren(
     ...metrics.map((m) => {
       const v = measure(m, recs);
-      const before = prev?.recs.flat() ?? [];
       const p = prev && before.length === recs.length && recs.length ? measure(m, before) : null;
       const btn = html('button', 'kpi');
       btn.type = 'button';
       btn.setAttribute('aria-pressed', String(m.id === state.metric));
       const delta = v == null || p == null || !p ? '' : m.total === 'ratio' ? `${v >= p ? '↑' : '↓'} ${(Math.abs(v - p) * 100).toFixed(1)} pts` : `${v >= p ? '↑' : '↓'} ${pct(Math.abs(v / p - 1))}`;
-      const sub = missing ? `Over ${recs.length} of ${recs.length + missing} ${word}s` : delta ? `${delta} vs the ${length === 1 ? '24 hours' : `${span} days`} before` : length ? 'No earlier period yet' : 'All kept days';
-      btn.append(html('span', 'label', m.label), html('span', 'value', v == null ? 'no data' : estimated(m.fmt, approxTotals && m.total !== 'ratio')(v)), html('span', 'delta', sub));
+      const sub = missing ? `Over ${recs.length} of ${recs.length + missing} ${word}s` : delta || (length ? 'No earlier period' : 'Every kept day');
+      btn.append(html('span', 'k', m.label), html('span', 'v', v == null ? 'no data' : estimated(m.fmt, approx && m.total !== 'ratio')(v)), html('span', 'd', sub));
       btn.addEventListener('click', () => ((state.metric = m.id), render()));
       return btn;
     }),
@@ -667,190 +726,245 @@ function render() {
 
   const metric = /** @type {Metric} */ (metrics.find((m) => m.id === state.metric));
   const perBucket = metric.total === 'ratio' ? metric : { ...metric, total: /** @type {Total} */ ('avg') };
-  const title = metric.total === 'sum' ? `${metric.label}${unitNote}` : `${metric.label}${b.unit === 'week' || b.unit === 'month' ? ` · ${b.unit}ly averages` : ''}`;
-  $('metric-title').textContent = title;
-  $('metric-about').textContent = [metric.about, approxTotals && '≈ Some hours are estimates from sampled data.', main.note].filter(Boolean).join(' ');
-  const mainValues = b.recs.map((rs) => measure(perBucket, rs));
-  drawChart($('main-chart'), over({ series: [{ name: metric.label, color: 'var(--s1)', values: mainValues }], fmt: metric.fmt, height: 240, title }, metric.num));
-  table(/** @type {HTMLDetailsElement} */ ($('main-table')), [bucketHead, title], rows(metric.num, [(i) => cell(mainValues[i], metric.fmt)]));
+  const title = metric.total === 'sum' ? `${metric.label}${unitNote}` : `${metric.label}${b.unit === 'week' || b.unit === 'month' ? `, ${b.unit}ly averages` : ''}`;
+  const values = b.recs.map((rs) => measure(perBucket, rs));
+  const earlier = prev && prev.keys.length === b.keys.length ? prev.recs.map((rs) => measure(perBucket, rs)) : null;
+  /** @type {Series[]} */
+  const series = [{ name: metric.label, color: 'var(--s1)', values }];
+  if (earlier) series.push({ name: `The ${period} before`, color: 'var(--spark)', values: earlier });
+  $('metric-about').textContent = [`${title}.`, metric.about, earlier && `Grey: the ${period} before.`, approx && '≈ Some hours are estimates from sampled data.', main.note].filter(Boolean).join(' ');
+  drawChart($('main-chart'), over({ series, fmt: metric.fmt, height: 260, title }, metric.num));
+  table($('main-table'), [head, title, ...(earlier ? [`The ${period} before`] : [])], rows(metric.num, [(i) => cell(values[i], metric.fmt), ...(earlier ? [(/** @type {number} */ i) => cell(earlier[i], metric.fmt)] : [])]));
+}
 
+/** Small multiples, each on its own scale, under a heading and its figure. */
+/** @param {HTMLElement} el @param {{ name: string, figure: string, aside?: string, values: (number | null)[] }[]} items @param {(spec: Omit<ChartSpec, 'labels' | 'when' | 'rank'>) => ChartSpec} spec @param {(n: number) => string} fmt @param {string} unit */
+function multiples(el, items, spec, fmt, unit) {
+  const boxes = items.map((it) => {
+    const box = html('div');
+    const h = html('h3', '', it.name);
+    if (it.aside) h.append(html('span', '', it.aside));
+    const chart = html('div', 'chart');
+    chart.style.setProperty('--h', '120px');
+    box.append(h, html('div', 'figure', it.figure), chart);
+    return { it, chart, box };
+  });
+  el.replaceChildren(...boxes.map((b) => b.box));
+  for (const { it, chart } of boxes)
+    if ((chart.hidden = it.values.length < 2)) chart.replaceChildren();
+    else drawChart(chart, spec({ series: [{ name: it.name, color: 'var(--s1)', values: it.values }], fmt, height: 120, ticks: 2, title: `${it.name}${unit}` }));
+}
 
-  // Every other chart and list takes its own frame, as its stored history allows.
-  errorsChart();
-  speedChart();
-  firewallChart();
-  routesCharts();
-  lists();
+/** API, pages and MCP: daily, from the routes, each on its own scale, as MCP is a sliver of API. */
+function kinds() {
+  const f = frame('routes', null);
+  const { over, rows } = framed(f);
+  const routed = f.listDays.filter((d) => d.routes);
+  const cover = coverage('routes', f.listDays, f.start, f.last);
+  const fmt = estimated(count, cover.approx);
+  /** @param {Rec} d @param {string} kind */
+  const kindOf = (d, kind) => Object.values(d.routes?.counts[kind] ?? {}).reduce((s, /** @type {[number, number]} */ [r]) => s + r, 0);
+  const all = sum(routed, (d) => KINDS.reduce((s, k) => s + kindOf(d, k), 0));
+  const unit = f.b.unit === 'day' ? ' a day' : ` a day, ${f.b.unit}ly averages`;
+  const items = KINDS.map((kind) => {
+    const total = sum(routed, (d) => kindOf(d, kind));
+    const values = f.b.recs.map((ds) => {
+      const r = ds.filter((d) => d.routes);
+      return r.length ? sum(r, (d) => kindOf(d, kind)) / r.length : null;
+    });
+    return { name: `${kind} requests`, figure: routed.length ? fmt(total) : 'no data', aside: all ? `${pct(total / all)} of all` : '', values };
+  });
+  multiples($('kinds'), items, (s) => over(s, (d) => d.routes), fmt, unit);
+  $('kinds-note').textContent = [`Requests${unit}, by what they asked for.`, f.note, cover.note].filter(Boolean).join(' ');
+  table($('kinds-table'), ['Day', ...KINDS.map((k) => `${k}${unit}`)], rows((d) => d.routes, items.map((k) => (i) => cell(k.values[i], fmt))));
 }
 
 /** Errors: small multiples, each on its own scale, as 5xx is a sliver of 4xx. */
-function errorsChart() {
+function errors() {
   const f = frame('status');
-  const { b, unitNote, head: bucketHead, over, rows } = { ...f, ...framed(f) };
-  const recs = b.recs.flat();
+  const { unitNote, head, over, rows } = framed(f);
+  const recs = f.b.recs.flat();
+  const items = /** @type {const} */ ([
+    ['Client errors (4xx)', (/** @type {string} */ k) => k[0] === '4'],
+    ['Server errors (5xx)', (/** @type {string} */ k) => k[0] === '5'],
+    ["Couldn't reach Bitview (502, 504, 52x)", unreachable],
+  ]).map(([name, test]) => ({ name, figure: cell(statusShare(recs, test), finePct), values: f.b.recs.map((rs) => statusShare(rs, test)) }));
+  multiples($('errors'), items, (s) => over(s, statusOf), finePct, `, share of requests${unitNote}`);
   $('errors-note').textContent = ['Shares of all requests.', f.note].filter(Boolean).join(' ');
-  const errors = /** @type {const} */ ([
-    ['Client errors (4xx)', (/** @type {string} */ k) => k[0] === '4', 'var(--s2)'],
-    ['Server errors (5xx)', (/** @type {string} */ k) => k[0] === '5', 'var(--s1)'],
-    ["Couldn't reach Bitview (502, 504, 52x)", unreachable, 'var(--s3)'],
-  ]).map(([name, test, color]) => {
-    const values = b.recs.map((rs) => statusShare(rs, test));
-    const box = html('div');
-    const h = html('h3', '', name);
-    const chart = html('div', 'chart');
-    box.append(h, html('div', 'big', cell(statusShare(recs, test), finePct)), chart);
-    return { name, color, values, box, chart };
-  });
-  $('errors').replaceChildren(...errors.map((e) => e.box));
-  for (const e of errors) drawChart(e.chart, over({ series: [e], fmt: finePct, height: 110, title: `${e.name}, share of requests${unitNote}` }, statusOf));
-  table(/** @type {HTMLDetailsElement} */ ($('errors-table')), [bucketHead, ...errors.map((e) => e.name)], rows(statusOf, errors.map((e) => (i) => cell(e.values[i], finePct))));
+  table($('errors-table'), [head, ...items.map((e) => e.name)], rows(statusOf, items.map((e) => (i) => cell(e.values[i], finePct))));
+
 }
 
 /** Speed: how long Bitview's servers took to answer what Cloudflare passed on. */
-function speedChart() {
+function speed() {
   const f = frame('origin');
-  const { b, unitNote, head: bucketHead, over, rows } = { ...f, ...framed(f) };
+  const { b, unitNote, head, over, rows } = { ...f, ...framed(f) };
   const recs = b.recs.flat();
-  const speed = /** @type {const} */ ([['Median', 'p50', 'var(--s1)'], ['95th percentile', 'p95', 'var(--s2)']]).map(([name, q, color]) => ({
+  const lines = /** @type {const} */ ([['Median', 'p50', 'var(--s1)'], ['95th percentile', 'p95', 'var(--s2)']]).map(([name, q, color]) => ({
     name, color, values: b.recs.map((rs) => originTime(rs, q)), total: originTime(recs, q),
   }));
-  const originHas = (/** @type {Rec} */ d) => d.origin?.p50;
+  const has = (/** @type {Rec} */ d) => d.origin?.p50;
+  $('speed-legend').replaceChildren(
+    ...lines.map((s) => {
+      const item = html('span');
+      const key = html('span', 'key');
+      key.style.background = s.color;
+      item.append(key, `${s.name} `, html('b', '', cell(s.total, ms)));
+      return item;
+    }),
+  );
   $('speed-note').textContent = `Only requests Cloudflare passed to Bitview's servers, not those it answered from its cache. ≈ From Cloudflare's sampled data.${b.unit === 'hour' ? '' : ' A day is its own median and 95th percentile; longer buckets average them.'}${f.note ? ` ${f.note}` : ''}`;
-  legend($('speed-legend'), speed.map((s) => ({ ...s, value: cell(s.total, ms) })));
-  drawChart($('speed-chart'), over({ series: speed, fmt: ms, height: 180, title: `Origin response time${unitNote}` }, originHas));
-  table(/** @type {HTMLDetailsElement} */ ($('speed-table')), [bucketHead, ...speed.map((s) => s.name)], rows(originHas, speed.map((s) => (i) => cell(s.values[i], ms))));
+  drawChart($('speed-chart'), over({ series: lines, fmt: ms, height: 200, title: `Origin response time${unitNote}` }, has));
+  table($('speed-table'), [head, ...lines.map((s) => s.name)], rows(has, lines.map((s) => (i) => cell(s.values[i], ms))));
 }
 
-/** Security: firewall events over time, and what acted on them. */
-function firewallChart() {
+/** Security: firewall events over time, what acted on them, and by which rule. */
+function firewall() {
   const f = frame('firewallActions', 'firewall');
-  const { b, listDays, unitNote, head: bucketHead, over, rows } = { ...f, ...framed(f) };
+  const { b, listDays, unitNote, head, over, rows } = { ...f, ...framed(f) };
   const recs = b.recs.flat();
-  const fwValues = b.recs.map((rs) => (having(rs, firewallOf).length ? sum(rs, firewallOf) / (b.unit === 'week' || b.unit === 'month' ? having(rs, firewallOf).length : 1) : null));
-  const fwTotal = having(recs, firewallOf).length ? sum(recs, firewallOf) : null;
+  const values = b.recs.map((rs) => (having(rs, firewallOf).length ? sum(rs, firewallOf) / (b.unit === 'week' || b.unit === 'month' ? having(rs, firewallOf).length : 1) : null));
+  const total = having(recs, firewallOf).length ? sum(recs, firewallOf) : null;
   /** @type {Map<string, number>} */
   const actions = new Map();
   for (const d of listDays) for (const [k, v] of Object.entries(d.firewallActions?.counts ?? {})) actions.set(k, (actions.get(k) ?? 0) + v);
   const actionTotal = [...actions.values()].reduce((s, v) => s + v, 0);
-  $('firewall-big').textContent = fwTotal == null ? 'no data' : `≈${count(fwTotal)}`;
+  $('firewall-total').textContent = total == null ? 'no data' : `≈${count(total)}`;
+  drawChart($('firewall-chart'), over({ series: [{ name: 'Firewall events', color: 'var(--s1)', values }], fmt: count, height: 160, title: `Firewall events${unitNote}` }, firewallOf));
+  table($('firewall-table'), [head, `Firewall events${unitNote}`], rows(firewallOf, [(i) => cell(values[i], (n) => `≈${count(n)}`)]));
+
   $('firewall-note').textContent = `Requests a Cloudflare security feature acted on. ≈ From Cloudflare's sampled events.${actionTotal ? ` Actions: ${[...actions].sort((a, z) => z[1] - a[1]).map(([k, v]) => `${words(k)} ${pct(v / actionTotal)}`).join(', ')}.` : ''}${f.note ? ` ${f.note}` : ''}`;
-  drawChart($('firewall-chart'), over({ series: [{ name: 'Firewall events', color: 'var(--s1)', values: fwValues }], fmt: count, height: 150, title: `Firewall events${unitNote}` }, firewallOf));
-  table(/** @type {HTMLDetailsElement} */ ($('firewall-table')), [bucketHead, `Firewall events${unitNote}`], rows(firewallOf, [(i) => cell(fwValues[i], (n) => `≈${count(n)}`)]));
+  const t = tally(BREAKDOWNS.firewallRules);
+  rankList($('firewall-rules'), 'firewallRules', [...t.counts].map(([key, value]) => ({ key, label: source(key), value })), t.fmt, 'Events');
 }
 
-/** API, pages and MCP: daily, from the routes, each on its own scale, as MCP is a sliver of API. */
-function routesCharts() {
-  const f = frame('routes', null);
-  const db = f.b;
-  const { over, rows } = framed(f);
-  const routed = f.listDays.filter((d) => d.routes);
-  const routeCover = coverage('routes', f.listDays, f.start, f.last);
-  const approx = (/** @type {(n: number) => string} */ fmt) => estimated(fmt, routeCover.approx);
-  const routeNote = [f.note, routeCover.note].filter(Boolean).join(' ');
-  $('kinds-note').textContent = routeNote;
-  /** @param {Rec} d @param {string} kind */
-  const kindOf = (d, kind) => Object.values(d.routes?.counts[kind] ?? {}).reduce((s, /** @type {[number, number]} */ [r]) => s + r, 0);
-  const kindTotal = sum(routed, (d) => KINDS.reduce((s, [k]) => s + kindOf(d, k), 0));
-  const kinds = KINDS.map(([kind, color]) => {
-    const total = sum(routed, (d) => kindOf(d, kind));
-    const values = db.recs.map((ds) => {
-      const r = ds.filter((d) => d.routes);
-      return r.length ? sum(r, (d) => kindOf(d, kind)) / r.length : null;
-    });
-    const box = html('div');
-    const h = html('h3', '', `${kind} requests`);
-    h.append(html('span', '', kindTotal ? `${pct(total / kindTotal)} of all` : ''));
-    const chart = html('div', 'chart');
-    box.append(h, html('div', 'big', routed.length ? approx(count)(total) : 'no data'), chart);
-    return { kind, color, values, box, chart };
-  });
-  $('kinds').replaceChildren(...kinds.map((k) => k.box));
-  const kindUnit = db.unit === 'day' ? ' a day' : ` a day · ${db.unit}ly averages`;
-  for (const { kind, color, values, chart } of kinds)
-    if ((chart.hidden = db.keys.length < 2)) chart.replaceChildren();
-    else drawChart(chart, over({ series: [{ name: kind, color, values }], fmt: approx(count), height: 130, title: `${kind} requests${kindUnit}` }, (d) => d.routes));
-  table(/** @type {HTMLDetailsElement} */ ($('kinds-table')), ['Day', ...KINDS.map(([k]) => `${k}${kindUnit}`)], rows((d) => d.routes, kinds.map((k) => (i) => cell(k.values[i], approx(count)))));
+/** The breakdown cards: routes with its kind and measure, then the rest, each with its tabs. */
+function cards() {
+  const grid = $('cards');
+  grid.replaceChildren(routesCard(), ...CARDS.map(([title, keys]) => {
+    const key = state.tabs[title];
+    const bd = BREAKDOWNS[key];
+    const t = tally(bd);
+    const card = html('section', 'panel');
+    const header = html('header');
+    const h = html('h2', '', title);
+    header.append(h);
+    if (keys.length > 1) {
+      const tabs = html('div', 'tabs');
+      tabs.setAttribute('role', 'group');
+      tabs.setAttribute('aria-label', title);
+      choices(tabs, keys.map((k) => [k, BREAKDOWNS[k].title]), key, (k) => ((state.tabs[title] = k), cards()));
+      header.append(tabs);
+    }
+    const list = html('div');
+    rankList(list, key, [...t.counts].map(([k, value]) => ({ key: k, label: bd.label?.(k) ?? k, value })), t.fmt, bd.unit ?? 'Requests');
+    const lead = key === 'bots' ? botsLead(t.counts) : '';
+    card.append(header, list, html('p', 'note', [lead, ...t.notes].filter(Boolean).join(' ')));
+    return card;
+  }));
+}
 
-  // Top routes, by requests or bandwidth, in one kind or all.
-  segmented($('route-kind'), [['All', 'All'], ...KINDS.map(([k]) => /** @type {[string, string]} */ ([k, k]))], state.kind, (id) => ((state.kind = id), render()));
-  segmented($('route-by'), [['requests', 'Requests'], ['bytes', 'Bandwidth']], state.by, (id) => ((state.by = id), render()));
-  $('routes-note').textContent = routeNote;
+/** Top routes, by requests or bandwidth, in one kind or all. */
+function routesCard() {
+  const f = frame('routes', null);
+  const cover = coverage('routes', f.listDays, f.start, f.last);
+  const card = html('section', 'panel');
+  const header = html('header');
+  const tabs = html('div', 'tabs');
+  tabs.setAttribute('role', 'group');
+  tabs.setAttribute('aria-label', 'Kind');
+  choices(tabs, [['All', 'All'], ...KINDS.map((k) => /** @type {[string, string]} */ ([k, k]))], state.kind, (id) => ((state.kind = id), cards()));
+  header.append(html('h2', '', 'Routes'), tabs);
+  const by = html('div', 'seg');
+  by.setAttribute('role', 'group');
+  by.setAttribute('aria-label', 'Rank by');
+  choices(by, [['requests', 'Requests'], ['bytes', 'Bandwidth']], state.by, (id) => ((state.by = id), cards()));
+  by.style.marginBottom = '12px';
   /** @type {Map<string, number>} */
   const routes = new Map();
-  for (const d of routed)
+  for (const d of f.listDays)
     for (const [kind, rs] of Object.entries(d.routes?.counts ?? {}))
       if (state.kind === 'All' || state.kind === kind)
-        for (const [key, [req, by]] of Object.entries(rs)) routes.set(key, (routes.get(key) ?? 0) + (state.by === 'bytes' ? by : req));
-  rankList($('routes'), [...routes].map(([key, value]) => ({ key, ...route(key), value })), approx(state.by === 'bytes' ? bytes : count), state.by === 'bytes' ? 'Bandwidth' : 'Requests');
-}
-
-/** Every breakdown's ranked list, over its own frame's days. */
-function lists() {
-  for (const bd of BREAKDOWNS) {
-    const f = frame(bd.key, null);
-    const cover = coverage(bd.key, f.listDays, f.start, f.last);
-    /** @type {Map<string, number>} */
-    const tally = new Map();
-    for (const d of f.listDays) for (const [k, v] of Object.entries(d[bd.key]?.counts ?? {})) tally.set(k, (tally.get(k) ?? 0) + v);
-    const lead = bd.key === 'bots' ? botsLead(tally) : '';
-    $(`${bd.key}-note`).textContent = [lead, bd.about, f.note, cover.note].filter(Boolean).join(' ');
-    rankList($(bd.key), [...tally].map(([key, value]) => ({ key, label: bd.label?.(key) ?? key, value })), estimated(count, cover.approx), bd.unit ?? 'Requests', bd.limit ?? 6);
-  }
+        for (const [key, [req, b]] of Object.entries(rs)) routes.set(key, (routes.get(key) ?? 0) + (state.by === 'bytes' ? b : req));
+  const list = html('div');
+  rankList(list, 'routes', [...routes].map(([key, value]) => {
+    const slash = key.indexOf('/'), host = key.slice(0, slash);
+    return { key, sub: host === HOME ? undefined : host, label: key.slice(slash), value };
+  }), estimated(state.by === 'bytes' ? bytes : count, cover.approx), state.by === 'bytes' ? 'Bandwidth' : 'Requests');
+  card.append(header, by, list, html('p', 'note', ["Each path reduced to its route: the API template, or the page's first folder, else (other).", f.note, cover.note].filter(Boolean).join(' ')));
+  return card;
 }
 
 /** Bot or human, as far as this plan can tell: only bots Cloudflare has verified are known. */
-/** @param {Map<string, number>} tally */
-function botsLead(tally) {
-  const all = [...tally.values()].reduce((s, v) => s + v, 0);
+/** @param {Map<string, number>} counts */
+function botsLead(counts) {
+  const all = [...counts.values()].reduce((s, v) => s + v, 0);
   if (!all) return '';
-  const bots = all - (tally.get('') ?? 0);
-  return `${pct(bots / all)} of requests came from bots Cloudflare has verified. The rest mixes people and other bots: telling them apart takes Cloudflare's bot score, which this plan doesn't include.`;
+  return `${pct((all - (counts.get('') ?? 0)) / all)} of requests came from bots Cloudflare has verified. The rest mixes people and other bots: telling them apart takes Cloudflare's bot score, which this plan doesn't include.`;
 }
 
 /** pull.py's marks, in the order a visitor cares about: what is held back first. */
-const MARKS = [
-  ['not published', '○ Not published', 'Cloudflare offers it; nothing of ours reads it.'],
-  ['grouped', '◐ Published grouped', 'Read, then reduced before anything is written.'],
-  ['published', '● Published', 'As Cloudflare gives it, counted per day or hour.'],
-];
+const MARKS = /** @type {const} */ ([
+  ['not published', 'hidden', 'Not published', 'Cloudflare offers it; nothing of ours reads it.'],
+  ['grouped', 'grouped', 'Published grouped', 'Read, then reduced before anything is written.'],
+  ['published', 'published', 'Published', 'As Cloudflare gives it, counted per day or hour.'],
+]);
 const SCOPES = { zone: "bitview.space's requests", account: 'Web Analytics' };
 
-/** The "What we can see" table and the dataset list, from what Cloudflare's API lists for this account. */
+/** The summary under the intro, the full "What we can see" list and the dataset list, from what Cloudflare's API
+ * lists for this account. */
 /** @param {Inventory} inv */
 function inventory(inv) {
   const last = inv.policy[inv.policy.length - 1];
-  const groups = MARKS.map(([mark, title, meaning]) => {
-    const group = html('div', 'marks');
-    const h = html('h3', '', title);
-    h.append(html('span', '', meaning));
-    const list = html('ul', 'inv');
-    for (const r of inv.policy.filter((r) => r.mark === mark)) {
+  $('marks').replaceChildren(
+    ...MARKS.map(([mark, ic, title, meaning]) => {
+      const rows = inv.policy.filter((r) => r.mark === mark);
       const li = html('li');
-      const how = html('div', 'how', r.how);
-      how.append(html('code', '', r === last ? `${r.fields.length} more field names, listed in data/inventory.json` : r.fields.join(' · ')));
-      li.append(html('div', 'what', r.what), how, html('div', 'kept', `kept up to ${r.kept}`));
-      list.append(li);
-    }
-    group.append(h, list);
-    return group;
-  });
-  $('inventory').replaceChildren(...groups);
+      const a = html('a');
+      a.setAttribute('href', `#mark-${ic}`);
+      a.append(icon(ic), html('b', '', title));
+      if (mark === 'not published') {
+        const items = html('ul');
+        items.append(...rows.map((r) => html('li', '', r === last ? 'Everything else' : r.what)));
+        a.append(items);
+      } else a.append(html('p', '', `${rows.length} kinds. ${meaning}`));
+      li.append(a);
+      return li;
+    }),
+  );
+  $('inventory-list').replaceChildren(
+    ...MARKS.map(([mark, ic, title, meaning]) => {
+      const group = html('div', 'inv-group');
+      group.id = `mark-${ic}`;
+      const h = html('h3');
+      h.append(icon(ic), title, html('small', '', meaning));
+      const list = html('ul', 'inv');
+      for (const r of inv.policy.filter((r) => r.mark === mark)) {
+        const li = html('li');
+        const how = html('div', 'how', r.how);
+        how.append(html('code', '', r === last ? `${r.fields.length} more field names, listed in data/inventory.json` : r.fields.join(', ')));
+        li.append(html('div', 'what', r.what), how, html('div', 'kept', `kept up to ${r.kept}`));
+        list.append(li);
+      }
+      group.append(h, list);
+      return group;
+    }),
+  );
   const toggle = $('show-fields');
   toggle.onclick = () => {
-    const on = $('inventory').classList.toggle('show-fields');
+    const on = $('inventory-list').classList.toggle('show-fields');
     toggle.setAttribute('aria-pressed', String(on));
     toggle.textContent = `${on ? 'Hide' : 'Show'} Cloudflare's field names`;
   };
 
   const read = inv.datasets.filter((d) => d.read);
   $('reads').textContent = `${read.map((d) => d.name).join(', ')} (${read.length} of the ${inv.datasets.length} datasets Cloudflare offers)`;
-  const details = /** @type {HTMLDetailsElement} */ ($('datasets'));
-  /** @type {HTMLElement} */ (details.querySelector('summary')).textContent = `All ${inv.datasets.length} datasets`;
   const rank = (/** @type {Dataset} */ d) => Number(!d.read) + Number(!d.visitors);
   const list = [...inv.datasets].sort((a, z) => rank(a) - rank(z) || a.name.localeCompare(z.name));
-  table(details, ['Dataset', 'Records', 'Kept', 'Fields', 'Read by pull.py'], list.map((d) => [
+  table($('datasets'), ['Dataset', 'Records', 'Kept', 'Fields', 'Read by pull.py'], list.map((d) => [
     d.name, d.visitors ? SCOPES[/** @type {keyof SCOPES} */ (d.scope)] : "Cloudflare's other products", d.kept, String(d.fields.length), d.read ? 'yes' : '',
   ]));
+  /** @type {HTMLElement} */ ($('datasets').querySelector('summary')).lastChild.textContent = `All ${inv.datasets.length} datasets`;
 }
 
 async function load() {
@@ -864,7 +978,8 @@ async function load() {
   now = latest;
   inventory(inv);
   const files = await Promise.all(months.map((/** @type {string} */ m) => get(`data/${m}.json`)));
-  days = files.flatMap((f) => Object.entries(f).map(([date, d]) => ({ date, ...d }))).sort((a, z) => (a.date < z.date ? -1 : 1));
+  /** @type {Day[]} */
+  const days = files.flatMap((f) => Object.entries(f).map(([date, d]) => ({ date, ...d }))).sort((a, z) => (a.date < z.date ? -1 : 1));
   byDate = new Map(days.map((d) => [d.date, d]));
   hours = new Map(days.flatMap((d) => Object.entries(d.hours ?? {}).map(([h, rec]) => [`${d.date}T${h}`, /** @type {Rec} */ (rec)])));
   final = days.filter((d) => d.requests != null);
@@ -872,25 +987,18 @@ async function load() {
   for (const [k, h] of [...hours].sort((a, z) => (a[0] < z[0] ? -1 : 1))) for (const key of Object.keys(h)) if (!firstHour.has(key)) firstHour.set(key, k);
   for (const [id, from] of [['from-totals', firstDay.get('requests')], ['from-sampled', firstDay.get('routes')], ['from-hours', firstHour.get('requests')?.slice(0, 10)]])
     $(id).textContent = from ? longDayFormat.format(toDate(from)) : 'not yet';
-  for (const bd of BREAKDOWNS) {
-    if (!bd.group) continue;
-    const card = html('section', 'card');
-    card.setAttribute('aria-labelledby', `${bd.key}-title`);
-    const title = html('h2', '', bd.title);
-    title.id = `${bd.key}-title`;
-    const note = html('p', 'note');
-    note.id = `${bd.key}-note`;
-    const list = html('div');
-    list.id = bd.key;
-    card.append(title, note, list);
-    $(bd.group).append(card);
-  }
-  glance();
+  await document.fonts.load('12px Inter');
+  measurer.font = `12px ${getComputedStyle(document.body).fontFamily}`;
+  status();
   render();
-  document.querySelector('main')?.classList.remove('loading');
+  document.documentElement.classList.remove('loading');
+  // The traffic bar draws its hairline only once it sticks.
+  const bar = $('bar');
+  new IntersectionObserver(([e]) => bar.classList.toggle('stuck', e.intersectionRatio < 1), { threshold: 1, rootMargin: '-1px 0px 0px 0px' }).observe(bar);
 }
 
 load().catch((e) => {
-  $('glance-title').textContent = `Couldn't load the data (${e.message}).`;
+  document.documentElement.classList.remove('loading');
+  $('verdict').textContent = `Couldn't load the data (${e.message}).`;
   throw e;
 });
