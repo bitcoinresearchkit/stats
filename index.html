@@ -42,7 +42,7 @@
   --soft: light-dark(#4f5664, #959cab);
   --line: light-dark(rgb(15 18 23 / 0.1), rgb(255 255 255 / 0.08));
   --line2: light-dark(rgb(15 18 23 / 0.18), rgb(255 255 255 / 0.15));
-  --spark: light-dark(rgb(15 18 23 / 0.4), rgb(255 255 255 / 0.3));
+  --spark: light-dark(rgb(15 18 23 / 0.5), rgb(255 255 255 / 0.36));
   --chip: light-dark(#ffffff, #2a2e36);
   --ok-bg: light-dark(rgb(19 128 74 / 0.07), rgb(74 222 128 / 0.07));
   --ok: light-dark(#13804a, #4ade80);
@@ -103,6 +103,7 @@ small, .note { font-size: var(--t2); color: var(--soft); }
 .home { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; text-decoration: none; min-height: 44px; }
 .home img { width: 20px; height: 20px; }
 .updated { font-size: var(--t2); color: var(--soft); }
+.updated[data-off="true"] { color: var(--warn); font-weight: 500; }
 
 /* Intro and status */
 .hero { display: grid; gap: 24px; padding: 24px 0 40px; }
@@ -114,7 +115,7 @@ small, .note { font-size: var(--t2); color: var(--soft); }
 .marks .icon { margin-top: 3px; color: var(--soft); }
 .marks b { color: var(--ink); font-weight: 600; }
 .marks a:hover b { text-decoration: underline; text-decoration-color: var(--line2); }
-.marks p { grid-column: 2; color: var(--soft); }
+.marks p { grid-column: 2; color: var(--soft); font-size: var(--t2); }
 
 .panel.status { padding: 0; align-self: start; overflow: hidden; }
 .verdict { display: flex; gap: 12px; align-items: start; padding: 18px 20px; border-bottom: 1px solid var(--line); background: var(--ok-bg); }

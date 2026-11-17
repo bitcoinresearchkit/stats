@@ -42,7 +42,7 @@ const HOUR = 36e5;
 const compactFormat = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 const decimalFormat = new Intl.NumberFormat('en', { maximumFractionDigits: 1 });
 const pctFormat = new Intl.NumberFormat('en', { style: 'percent', maximumFractionDigits: 1 });
-const finePctFormat = new Intl.NumberFormat('en', { style: 'percent', maximumSignificantDigits: 2 });
+const finePctFormat = new Intl.NumberFormat('en', { style: 'percent', minimumSignificantDigits: 2, maximumSignificantDigits: 2 });
 const regions = new Intl.DisplayNames(['en'], { type: 'region' });
 const dayFormat = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const longDayFormat = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
@@ -612,7 +612,7 @@ const CHECKS = [
     about: 'Off above 0.5% of requests and 3× usual.' },
   { label: 'Client errors (4xx)', read: (hs) => statusShare(hs, (k) => k[0] === '4'), fmt: pct, limit: 0.1, times: 2,
     about: 'Mostly scanners and mistyped addresses. Off above 10% and 2× usual.' },
-  { label: 'Origin time, 95th pct', read: (hs) => originTime(hs, 'p95'), fmt: ms, limit: 1000, times: 2,
+  { label: 'Origin time (p95)', read: (hs) => originTime(hs, 'p95'), fmt: ms, limit: 1000, times: 2,
     about: "How long Bitview's servers took for the slowest 5% of requests. Off above 1 s and 2× usual." },
   { label: 'Firewall events a day', read: (hs) => (having(hs, firewallOf).length ? (sum(hs, firewallOf) / having(hs, firewallOf).length) * 24 : null), fmt: (n) => `≈${count(Math.round(n))}`, limit: 1000, times: 5,
     about: 'Requests a Cloudflare security feature acted on. Off above 1,000 a day and 5× usual.' },
@@ -648,13 +648,14 @@ function status() {
   const pulled = `${clockFormat.format(new Date(now.pulled))} UTC`;
   items.push({
     label: 'This page',
-    value: age >= 1 ? `Pulled ${Math.floor(age)} h ago` : 'On time',
-    usual: '',
+    value: age >= 1 ? `${Math.floor(age)} h ago` : 'On time',
+    usual: 'pulled hourly',
     off: age > 3,
-    about: 'Pulled from Cloudflare every hour. Off when the last pull is over 3 hours old.',
+    about: "Pulled from Cloudflare every hour. Off when the last pull is over 3 hours old: every number here is as of then. Check the hourly job that runs pull.py, and its Cloudflare token.",
   });
   const off = items.filter((i) => i.off);
-  $('updated').textContent = `Updated ${pulled}`;
+  $('updated').textContent = age > 3 ? `Updated ${Math.floor(age)} h ago` : `Updated ${pulled}`;
+  $('updated').dataset.off = String(age > 3);
   $('verdict').textContent = off.length ? `${off.length} thing${off.length > 1 ? 's' : ''} to look at` : 'All fine';
   icon(off.length ? 'off' : 'ok', $('verdict-icon'));
   $('status').dataset.off = String(off.length > 0);
@@ -671,7 +672,7 @@ function status() {
       if (i.usual) val.append(html('span', 'usual', i.usual));
       if (i.spark) val.append(sparkline(i.spark, 24));
       summary.append(icon(i.off ? 'off' : 'ok'), html('span', 'label', i.label), val, icon('chevron'));
-      const about = html('div', 'about', `${i.off ? 'Off now. ' : ''}${i.about}`);
+      const about = html('div', 'about', i.about);
       if (i.extra) about.append(i.extra);
       details.append(summary, about);
       li.append(details);
@@ -716,7 +717,7 @@ function overview() {
   const period = length === 1 ? '24 hours' : `${span} days`;
   const through = new Date(now.through);
   $('through').textContent = hourly
-    ? `The last ${period} by hour, to ${dayFormat.format(through)}, ${clockFormat.format(through)} UTC${missing ? `, ${missing} hours missing` : ''}. Lists cover ${main.listDays.length === 1 ? longDayFormat.format(toDate(main.listDays[0].date)) : `${dayFormat.format(toDate(main.start))} to ${dayFormat.format(toDate(main.last))}`}, by day.`
+    ? `The last ${period} by hour, to ${dayFormat.format(through)}, ${clockFormat.format(through)} UTC${missing ? `, ${missing} hours missing` : ''}. Lists cover ${main.listDays.length === 1 ? longDayFormat.format(toDate(main.listDays[0].date)) : `${dayFormat.format(toDate(main.start))} to ${dayFormat.format(toDate(main.last))}`}, by day. Changes are against the ${period} before.`
     : `${longDayFormat.format(toDate(main.start))} to ${longDayFormat.format(toDate(main.last))}, UTC${missing ? `, ${daysWord(missing)} missing` : ''}. A chart with less history shows what it has, and says so.`;
 
   const metrics = METRICS.filter((m) => !(hourly && m.daily));
@@ -731,7 +732,7 @@ function overview() {
       btn.type = 'button';
       btn.setAttribute('aria-pressed', String(m.id === state.metric));
       const delta = v == null || p == null || !p ? '' : m.total === 'ratio' ? `${v >= p ? '↑' : '↓'} ${(Math.abs(v - p) * 100).toFixed(1)} pts` : `${v >= p ? '↑' : '↓'} ${pct(Math.abs(v / p - 1))}`;
-      const sub = missing ? `Over ${recs.length} of ${recs.length + missing} ${word}s` : delta ? `${delta} vs prior ${main.range[1]}` : length ? 'No earlier period' : 'Every kept day';
+      const sub = missing ? `Over ${recs.length} of ${recs.length + missing} ${word}s` : delta || (length ? 'No earlier period' : 'Every kept day');
       btn.append(html('span', 'k', m.label), html('span', 'v', v == null ? 'no data' : estimated(m.fmt, approx && m.total !== 'ratio')(v)), html('span', 'd', sub));
       btn.addEventListener('click', () => ((state.metric = m.id), render()));
       return btn;
@@ -843,7 +844,7 @@ function firewall() {
   const actions = new Map();
   for (const d of listDays) for (const [k, v] of Object.entries(d.firewallActions?.counts ?? {})) actions.set(k, (actions.get(k) ?? 0) + v);
   const actionTotal = [...actions.values()].reduce((s, v) => s + v, 0);
-  $('firewall-total').textContent = total == null ? 'no data' : `≈${count(total)}`;
+  $('firewall-total').textContent = total == null ? 'no data' : `≈${count(total)} events`;
   drawChart($('firewall-chart'), over({ series: [{ name: 'Firewall events', color: 'var(--s1)', values }], fmt: count, height: 160, title: `Firewall events${unitNote}` }, firewallOf));
   table($('firewall-table'), [head, `Firewall events${unitNote}`], rows(firewallOf, [(i) => cell(values[i], (n) => `≈${count(n)}`)]));
 
@@ -936,7 +937,11 @@ function inventory(inv) {
       const li = html('li');
       const a = html('a');
       a.setAttribute('href', `#mark-${ic}`);
-      a.append(icon(ic), html('b', '', `${title}: ${rows.length} kinds`), html('p', '', meaning));
+      a.append(icon(ic), html('b', '', `${title}: ${rows.length} kinds`));
+      // What is held back is named in full; the rest is counted. Sentence case, keeping acronyms (IP, ASN).
+      const lower = (/** @type {string} */ w) => (/^.[a-z]/.test(w) ? w[0].toLowerCase() + w.slice(1) : w);
+      const names = rows.map((r, k) => (k ? lower(r.what) : r.what));
+      a.append(html('p', '', mark === 'not published' ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}.` : meaning));
       li.append(a);
       return li;
     }),
