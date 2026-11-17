@@ -654,7 +654,8 @@ function status() {
     ...[...off, ...items.filter((i) => !i.off)].map((i) => {
       const li = html('li');
       li.dataset.off = String(i.off);
-      const details = html('details');
+      const details = /** @type {HTMLDetailsElement} */ (html('details'));
+      details.open = i.off;
       const summary = html('summary');
       const val = html('span', 'val');
       val.append(html('span', '', i.value));
