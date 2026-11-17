@@ -23,7 +23,7 @@ Per UTC day D, "final" meaning D ended over an hour ago:
   push fails (offline)                        -> the commit stays local and goes out with the next run's push
   Cloudflare or network error                 -> exit non-zero with the message (launchd's log)
 """
-import json, re, subprocess, sys, time, urllib.request
+import json, re, subprocess, sys, urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from xml.etree import ElementTree
@@ -120,7 +120,13 @@ def fetch(url, body=None, token=None):
         with urllib.request.urlopen(urllib.request.Request(url, data, headers), timeout=120) as r:
             return r.read()
     except urllib.error.HTTPError as e:
+        if e.code in (401, 403) and token:  # Cloudflare answers a revoked token 401, an unknown one 403
+            raise Unauthorized(url) from None
         sys.exit(f"{url}: HTTP {e.code} {e.read()[:300].decode(errors='replace')}")
+
+
+class Unauthorized(Exception):
+    pass
 
 
 def cloudflare_token():
@@ -131,23 +137,32 @@ def cloudflare_token():
 
 class Zone:
     def __init__(self):
-        self.token, self.fresh = cloudflare_token(), time.monotonic()
-        token = self.token
-        zones = json.loads(fetch(f"{CF}/zones?name={ZONE}", token=token))["result"]
+        self.token = cloudflare_token()
+        zones = self.api(f"{CF}/zones?name={ZONE}")["result"]
         if len(zones) != 1:
             sys.exit(f"Cloudflare: expected one zone named {ZONE}, found {len(zones)}")
         self.tag, self.account = zones[0]["id"], zones[0]["account"]["id"]
-        records = json.loads(fetch(f"{CF}/zones/{self.tag}/dns_records?per_page=5000", token=token))["result"]
+        records = self.api(f"{CF}/zones/{self.tag}/dns_records?per_page=5000")["result"]
         self.hosts = {r["name"] for r in records}
         self.tunnels = {}  # tunnel id -> the zone's hosts it serves, from their CNAMEs to <id>.cfargotunnel.com
         for r in records:
             if r["type"] == "CNAME" and r["content"].endswith(".cfargotunnel.com"):
                 self.tunnels.setdefault(r["content"].split(".")[0], []).append(r["name"])
 
+    def api(self, url, body=None):
+        # A 401 or 403 means the cf login's token expired or was rotated by another cf run (one 11-17 pull failed that way
+        # between two calls): read the login again, once.
+        try:
+            return json.loads(fetch(url, body, self.token))
+        except Unauthorized:
+            self.token = cloudflare_token()
+        try:
+            return json.loads(fetch(url, body, self.token))
+        except Unauthorized:
+            sys.exit(f"{url}: refused (401 or 403) with a freshly read cf login")
+
     def graphql(self, query):
-        if time.monotonic() - self.fresh > 600:  # the login lives an hour, a backfill longer
-            self.token, self.fresh = cloudflare_token(), time.monotonic()
-        r = json.loads(fetch(f"{CF}/graphql", {"query": query}, self.token))
+        r = self.api(f"{CF}/graphql", {"query": query})
         if r.get("errors"):
             sys.exit("Cloudflare GraphQL: " + "; ".join(e["message"] for e in r["errors"]))
         return r["data"]
@@ -389,10 +404,10 @@ def tunnels(zone, named):
     has no config at Cloudflare), and whether one is a host Bitview publishes (`named`); never its id, name, services or
     addresses. A dev tunnel is listed, not public."""
     account = f"{CF}/accounts/{zone.account}/cfd_tunnel"
-    by_id = {t["id"]: t for t in json.loads(fetch(f"{account}?is_deleted=false&per_page=1000", token=zone.token))["result"]}
+    by_id = {t["id"]: t for t in zone.api(f"{account}?is_deleted=false&per_page=1000")["result"]}
     out = []
     for i, dns in zone.tunnels.items():
-        config = json.loads(fetch(f"{account}/{i}/configurations", token=zone.token))["result"] or {}
+        config = zone.api(f"{account}/{i}/configurations")["result"] or {}
         ingress = {r.get("hostname") for r in (config.get("config") or {}).get("ingress") or []}
         hosts = sorted(ingress & zone.hosts or dns)
         t = by_id.get(i, {"status": "deleted", "connections": []})
