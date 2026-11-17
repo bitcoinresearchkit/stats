@@ -419,8 +419,9 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
       <div class="prose">
         <h2 id="logs-title">Bitview's own logs</h2>
         <p>Bitview's server logs one line per request: the time, the method, the status, the path with its query, and
-          how long the answer took. No IP address, no user agent, nothing else about who sent it. The lines are kept in
-          daily files that the server deletes after seven days. The last 1,000 lines are public, on the
+          how long the answer took. No IP address, no user agent, nothing else about who sent it: Cloudflare passes each
+          visitor's IP address on in the X-Forwarded-For header, and the server neither reads nor logs it. The lines
+          are kept in daily files that the server deletes after seven days. The last 1,000 lines are public, on the
           <a href="https://bitview.space/logs/">Logs page</a> and at
           <a href="https://bitview.space/api/server/logs">/api/server/logs</a>. The MCP server logs only its start.
           Bitview's <a href="https://bitview.space/privacy/">privacy page</a> says the same.</p>
@@ -429,9 +430,9 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
         <p><b>Source.</b> Cloudflare's own counts of the requests it answered for bitview.space and its subdomains,
           pulled every hour from its analytics API. Nothing was added to Bitview's pages for them. Days and hours are
           UTC.</p>
-        <p><b>Referring sites</b> ended on Nov 17, 2026. They came from Cloudflare Web Analytics, a script Cloudflare
-          added to Bitview's pages for visitors outside the EU; it was turned off that day and the counts were
-          deleted.</p>
+        <p><b>Referring sites:</b> counts by host were published until Nov 17, 2026, and are now deleted. They came
+          from Cloudflare Web Analytics, a script Cloudflare added to Bitview's pages for visitors outside the EU, which
+          was turned off and deleted that day.</p>
         <p><b>Exact or estimated.</b> Daily totals, countries, status codes, browsers, content types, HTTP and TLS
           versions and client reputation count every request, and so do the last three days of hours. Older hours,
           routes, operating systems, devices, verified bots, cache status, edge locations, origin times and firewall

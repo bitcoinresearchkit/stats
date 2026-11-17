@@ -78,10 +78,11 @@ POLICY = (
     ("Full user agent", "not published", "Detailed enough to single out one browser.", {"userAgent"}),
     ("Network (ASN)", "not published", "On a small network it points to a person or a company.", {"clientAsn", "clientASNDescription"}),
     ("Query string", "not published", "Holds what people looked up.", {"clientRequestQuery"}),
-    ("Referring site and page", "not published", "Where someone came from. Published as hosts until 2026-11-17, from Web "
-     "Analytics, which was then turned off and the counts deleted.", {"clientRefererHost", "refererHost", "clientRefererPath", "clientRefererQuery", "refererPath"}),
+    ("Referring site and page", "not published", "Where someone came from. Counts by host were published until 2026-11-17, "
+     "from Web Analytics, which was then turned off; those counts are now deleted.", {"clientRefererHost", "refererHost", "clientRefererPath", "clientRefererQuery", "refererPath"}),
     ("Page address in Web Analytics", "not published", "The full address of a page someone viewed, which holds what they "
-     "looked up.", {"url", "pageUrl", "urlPath", "urlParams", "largestContentfulPaintPath", "largestContentfulPaintObjectPath",
+     "looked up. Web Analytics was deleted on 2026-11-17; its records could still be read right after, and Cloudflare "
+     "doesn't document whether deleting drops them.", {"url", "pageUrl", "urlPath", "urlParams", "largestContentfulPaintPath", "largestContentfulPaintObjectPath",
      "cumulativeLayoutShiftPath", "firstInputDelayPath", "interactionToNextPaintPath"}),
     ("Request and session ids", "not published", "Tie a record to one request or one visitor.",
      {"rayName", "originatorRayName", "sessionId", "sessionIdHash", "apiGatewayMatchedSessionIdentifier", "messageId"}),

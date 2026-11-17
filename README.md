@@ -39,8 +39,8 @@ names and the status of the tunnels that carry its requests.
 | Full user agent | not published | Detailed enough to single out one browser. | up to 1 month | `userAgent` |
 | Network (ASN) | not published | On a small network it points to a person or a company. | up to 1 month | `clientASNDescription`, `clientAsn` |
 | Query string | not published | Holds what people looked up. | up to 1 month | `clientRequestQuery` |
-| Referring site and page | not published | Where someone came from. Published as hosts until 2026-11-17, from Web Analytics, which was then turned off and the counts deleted. | up to 6 months | `clientRefererHost`, `clientRefererPath`, `clientRefererQuery`, `refererHost`, `refererPath` |
-| Page address in Web Analytics | not published | The full address of a page someone viewed, which holds what they looked up. | up to 6 months | `cumulativeLayoutShiftPath`, `firstInputDelayPath`, `interactionToNextPaintPath`, `largestContentfulPaintObjectPath`, `largestContentfulPaintPath`, `pageUrl`, `url`, `urlParams`, `urlPath` |
+| Referring site and page | not published | Where someone came from. Counts by host were published until 2026-11-17, from Web Analytics, which was then turned off; those counts are now deleted. | up to 6 months | `clientRefererHost`, `clientRefererPath`, `clientRefererQuery`, `refererHost`, `refererPath` |
+| Page address in Web Analytics | not published | The full address of a page someone viewed, which holds what they looked up. Web Analytics was deleted on 2026-11-17; its records could still be read right after, and Cloudflare doesn't document whether deleting drops them. | up to 6 months | `cumulativeLayoutShiftPath`, `firstInputDelayPath`, `interactionToNextPaintPath`, `largestContentfulPaintObjectPath`, `largestContentfulPaintPath`, `pageUrl`, `url`, `urlParams`, `urlPath` |
 | Request and session ids | not published | Tie a record to one request or one visitor. | up to 1 month | `apiGatewayMatchedSessionIdentifier`, `messageId`, `originatorRayName`, `rayName`, `sessionId`, `sessionIdHash` |
 | Minutes | not published | Hours at most: on a quiet minute, a breakdown can single out one visit. | up to 1 year | `datetimeFifteenMinutes`, `datetimeFiveMinutes`, `datetimeHalfOfHour`, `datetimeMinute` |
 | Everything else | not published | Not read: browser and system versions, security rules and their matches, performance timings, and fields of other Cloudflare features. | up to 1 year | 624 more, in `data/inventory.json` |
@@ -53,9 +53,11 @@ The full list, dataset by dataset and field by field, is in [`data/inventory.jso
 ### Server logs
 
 Bitview's own server logs one line per request: the time, the method, the status, the path with its query, and how
-long the answer took. No IP address, no user agent, nothing else about who sent it. The lines are kept in daily files
-that the server deletes after seven days. The last 1,000 lines are public, on the [Logs page](https://bitview.space/logs/)
-and at [`/api/server/logs`](https://bitview.space/api/server/logs). The MCP server logs only its start. Bitview's
+long the answer took. No IP address, no user agent, nothing else about who sent it: Cloudflare passes each visitor's
+IP address on in the `X-Forwarded-For` header, and the server neither reads nor logs it. The lines are kept in daily
+files that the server deletes after seven days. The last 1,000 lines are public, on the
+[Logs page](https://bitview.space/logs/) and at [`/api/server/logs`](https://bitview.space/api/server/logs). The MCP
+server logs only its start. Bitview's
 [privacy page](https://bitview.space/privacy/) says the same.
 
 ## What these numbers are
@@ -63,8 +65,9 @@ and at [`/api/server/logs`](https://bitview.space/api/server/logs). The MCP serv
 **Source.** Cloudflare's own counts of the requests it answered for bitview.space and its subdomains, pulled every
 hour from its GraphQL Analytics API. Nothing was added to Bitview's pages for them. Days and hours are UTC.
 
-**Referring sites** ended on 2026-11-17. They came from Cloudflare Web Analytics, a script Cloudflare added to Bitview's
-pages for visitors outside the EU, and it was turned off that day. The counts were deleted, history included.
+**Referring sites:** counts by host were published until 2026-11-17 and are now deleted, history included. They came
+from Cloudflare Web Analytics, a script Cloudflare added to Bitview's pages for visitors outside the EU, which was
+turned off and deleted that day.
 
 - **Requests:** every request Cloudflare answered: browsers, bots, API and MCP clients alike.
 - **Unique IPs** (`uniques`): Cloudflare's approximate count of distinct client IP addresses in a day. One person can
