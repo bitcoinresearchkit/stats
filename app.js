@@ -6,16 +6,17 @@
  *   requests?: number, cachedRequests?: number, bytes?: number, cachedBytes?: number, pageViews?: number, uniques?: number,
  *   sampleInterval?: number, firewall?: number, origin?: { p50?: number, p95?: number, sampleInterval: number },
  *   [field: string]: any
- * }} Rec  One stored day or hour; a day's breakdowns are Sampled, an hour's status is plain counts
+ * }} Rec  One stored day or hour; a day's breakdowns are { counts, sampleInterval }, an hour's status is plain counts
  * @typedef {Rec & { date: string, hours?: Record<string, Rec> }} Day
  * @typedef {{ note: string, approx: boolean }} Coverage
  * @typedef {'sum' | 'avg' | 'ratio'} Total
  * @typedef {{ id: string, label: string, about: string, num: (d: Rec) => number | undefined, den?: (d: Rec) => number | undefined, total: Total, fmt: (n: number) => string, daily?: boolean }} Metric
- * @typedef {{ name: string, color: string, values: (number | null)[] }} Series
- * @typedef {{ labels: string[], when: (i: number) => string, rank: (i: number) => number, series: Series[], fmt: (n: number) => string, height: number, title: string, ticks?: number }} ChartSpec
- *   fmt: values, with ≈ when they are estimates; the axis shows the same numbers without it
- * @typedef {{ key: string, label: string, sub?: string, value: number }} Row
- * @typedef {{ key: string, title: string, unit?: string, about?: string, label?: (k: string) => string }} Breakdown
+ * @typedef {{ name: string, color: string, values: (number | null)[], muted?: boolean }} Series  muted: a thin grey line for context
+ * @typedef {{ labels: string[], when: (i: number) => string, rank: (i: number) => number, series: Series[], fmt: (n: number) => string, approx?: boolean, height: number, title: string, ticks?: number }} ChartSpec
+ *   approx: the values are estimates, so the tooltip marks them ≈ (the axis doesn't)
+ * @typedef {{ label: string, sub?: string, value: number }} Row
+ * @typedef {{ title: string, unit?: string, about?: string, label?: (k: string) => string, lead?: (counts: Map<string, number>) => string }} Breakdown
+ *   lead: a sentence on the whole list, before its notes
  * @typedef {{ unit: 'hour' | 'day' | 'week' | 'month', keys: string[], recs: Rec[][], size: number[], label: (i: number) => string, when: (i: number) => string, rank: (i: number) => number }} Buckets  rank: how round a bucket is to label, as midnight over 06:00
  * @typedef {{ what: string, mark: string, how: string, fields: string[], kept: string }} Policy  One row of pull.py's POLICY
  * @typedef {{ scope: string, name: string, kept: string, read: boolean, visitors: boolean, fields: string[] }} Dataset
@@ -48,6 +49,7 @@ const dayFormat = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric'
 const longDayFormat = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const monthFormat = new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric', timeZone: 'UTC' });
 const clockFormat = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+const listFormat = new Intl.ListFormat('en');
 
 /** @param {number} n */
 const count = (n) => compactFormat.format(n);
@@ -105,21 +107,21 @@ function country(code) {
 
 /** Every stored daily breakdown, drawn as a ranked list. */
 /** @type {Record<string, Breakdown>} */
-const BREAKDOWNS = Object.fromEntries(/** @type {Breakdown[]} */ ([
-  { key: 'status', title: 'Status codes', label: (k) => `${k} ${STATUS[/** @type {keyof STATUS} */ (k)] ?? STATUS[/** @type {keyof STATUS} */ (k[0])] ?? ''}` },
-  { key: 'firewallRules', title: 'By rule', unit: 'Events', label: source },
-  { key: 'countries', title: 'Countries', label: country },
-  { key: 'colos', title: 'Edge locations', about: "Cloudflare's data centers that answered." },
-  { key: 'browsers', title: 'Browsers', unit: 'Page views' },
-  { key: 'os', title: 'Systems' },
-  { key: 'devices', title: 'Devices', label: words },
-  { key: 'bots', title: 'Verified bots', label: (k) => k || 'Not a verified bot' },
-  { key: 'ipClasses', title: 'Reputation', label: words, about: "Cloudflare's class for the client's network." },
-  { key: 'contentTypes', title: 'Content' },
-  { key: 'cache', title: 'Cache', label: words },
-  { key: 'http', title: 'HTTP' },
-  { key: 'tls', title: 'TLS' },
-]).map((b) => [b.key, b]));
+const BREAKDOWNS = {
+  status: { title: 'Status codes', label: (k) => `${k} ${STATUS[/** @type {keyof STATUS} */ (k)] ?? STATUS[/** @type {keyof STATUS} */ (k[0])] ?? ''}` },
+  firewallRules: { title: 'By rule', unit: 'Events', label: source },
+  countries: { title: 'Countries', label: country },
+  colos: { title: 'Edge locations', about: "Cloudflare's data centers that answered." },
+  browsers: { title: 'Browsers', unit: 'Page views' },
+  os: { title: 'Systems' },
+  devices: { title: 'Devices', label: words },
+  bots: { title: 'Verified bots', label: (k) => k || 'Not a verified bot', lead: botsLead },
+  ipClasses: { title: 'Reputation', label: words, about: "Cloudflare's class for the client's network." },
+  contentTypes: { title: 'Content' },
+  cache: { title: 'Cache', label: words },
+  http: { title: 'HTTP' },
+  tls: { title: 'TLS' },
+};
 /** Breakdown cards: each a title and its tabs. Routes is its own card, with its own controls. */
 const CARDS = [
   ['Status codes', ['status']],
@@ -306,6 +308,13 @@ function frame(dayKey, hourKey = dayKey) {
   return { range, b, prev, start, last, listDays: final.filter((d) => d.date >= start), note };
 }
 
+/** The days a frame's lists add up, named when they differ from its chart's hours: "Nov 16" or "Nov 10 to Nov 16". */
+/** @param {Frame} f */
+function listSpan(f) {
+  if (!f.range[3]) return '';
+  return f.start === f.last ? dayFormat.format(toDate(f.last)) : `${dayFormat.format(toDate(f.start))} to ${dayFormat.format(toDate(f.last))}`;
+}
+
 /** Bucket helpers for one frame: chart specs and table rows, saying how many hours or days hold data. */
 /** @param {Frame} f */
 function framed(f) {
@@ -317,6 +326,7 @@ function framed(f) {
     return b.when(i) + (n === of ? '' : n ? `, ${n} of ${of} ${word}s` : ', no data');
   };
   return {
+    word,
     unitNote: b.unit === 'hour' ? ' an hour' : b.unit === 'day' ? ' a day' : ` a day, ${b.unit}ly averages`,
     head: { hour: 'Hour', day: 'Day', week: 'Week of', month: 'Month' }[b.unit],
     /** @param {Omit<ChartSpec, 'labels' | 'when' | 'rank'>} chart @param {(d: Rec) => unknown} has @returns {ChartSpec} */
@@ -356,10 +366,10 @@ const ICONS = {
   published: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   chevron: 'M9 6l6 6-6 6',
 };
-/** @param {keyof ICONS} name @param {Element} [into] An existing <svg> to fill, else a new one */
-function icon(name, into) {
-  const el = into ?? svg('svg', { class: 'icon', viewBox: '0 0 24 24', 'aria-hidden': 'true' });
-  el.replaceChildren(svg('path', { d: ICONS[name] }));
+/** @param {keyof ICONS} name @param {string} [label] What it says, when no text beside it does */
+function icon(name, label) {
+  const el = svg('svg', { class: 'icon', viewBox: '0 0 24 24', ...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': 'true' }) });
+  svg('path', { d: ICONS[name] }, el);
   return el;
 }
 
@@ -393,14 +403,14 @@ function drawChart(el, spec) {
   charts.set(el, { ...spec, width: W });
   resize.observe(el);
   const { labels, series, fmt, height } = spec;
+  const value = estimated(fmt, !!spec.approx);
   const n = labels.length;
   const all = /** @type {number[]} */ (series.flatMap((s) => s.values).filter((v) => v != null));
   const top = Math.max(0, ...all);
   const step = niceStep(top, spec.ticks ?? 4);
   const max = Math.max(step, step * Math.ceil(top / step));
   const ticks = Array.from({ length: Math.round(max / step) + 1 }, (_, i) => i * step);
-  const tick = (/** @type {number} */ t) => fmt(t).replace('≈', '');
-  const left = 8 + Math.max(...ticks.map((t) => textWidth(tick(t))));
+  const left = 8 + Math.max(...ticks.map((t) => textWidth(fmt(t))));
   const pad = 8, bottom = 24, right = 4;
   const plotW = Math.max(1, W - left - right), plotH = height - pad - bottom;
   /** @param {number} i */
@@ -411,7 +421,7 @@ function drawChart(el, spec) {
   const root = svg('svg', { width: W, height, viewBox: `0 0 ${W} ${height}`, role: 'img', tabindex: 0, 'aria-label': `${spec.title}. The table lists every value.` });
   for (const t of ticks) {
     svg('line', { x1: left, x2: W - right, y1: y(t), y2: y(t), stroke: t ? 'var(--line)' : 'var(--line2)', 'shape-rendering': 'crispEdges' }, root);
-    svg('text', { x: left - 8, y: y(t) + 4, 'text-anchor': 'end' }, root).textContent = tick(t);
+    svg('text', { x: left - 8, y: y(t) + 4, 'text-anchor': 'end' }, root).textContent = fmt(t);
   }
   // Labels on the roundest buckets (midnights, then 12:00, 06:00…) that fill about half the room, newest first,
   // none crowding another.
@@ -429,7 +439,7 @@ function drawChart(el, spec) {
     svg('text', { x: x(i), y: height - 6, 'text-anchor': anchor }, root).textContent = labels[i];
   }
 
-  const fill = series.filter((s) => s.color !== 'var(--spark)').length === 1;
+  const fill = series.filter((s) => !s.muted).length === 1;
   for (const s of series) {
     /** @type {[number, number][][]} */
     const runs = [];
@@ -438,7 +448,7 @@ function drawChart(el, spec) {
       if (s.values[i - 1] != null) runs.at(-1)?.push([x(i), y(v)]);
       else runs.push([[x(i), y(v)]]);
     });
-    const muted = s.color === 'var(--spark)';
+    const { muted } = s;
     for (const run of runs) {
       const d = run.map(([px, py], k) => `${k ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`).join('');
       if (fill && !muted && run.length > 1)
@@ -456,7 +466,9 @@ function drawChart(el, spec) {
   let at = -1;
   /** @param {number} i */
   const show = (i) => {
-    at = Math.max(0, Math.min(n - 1, i));
+    const next = Math.max(0, Math.min(n - 1, i));
+    if (next === at) return;
+    at = next;
     const px = x(at);
     hair.setAttribute('x1', String(px));
     hair.setAttribute('x2', String(px));
@@ -468,7 +480,7 @@ function drawChart(el, spec) {
       const row = html('div', 'row');
       const key = html('span', 'key');
       key.style.background = s.color;
-      row.append(key, html('b', '', cell(v, fmt)), html('span', '', s.name));
+      row.append(key, html('b', '', cell(v, value)), html('span', '', s.name));
       tip.append(row);
     });
     cross.setAttribute('visibility', 'visible');
@@ -499,21 +511,21 @@ function sparkline(values, recent) {
   const W = 72, H = 20, n = values.length;
   const max = Math.max(...values.map((v) => v ?? 0)) || 1;
   const root = svg('svg', { class: 'spark', viewBox: `0 0 ${W} ${H}`, 'aria-hidden': 'true' });
-  /** @param {number} from @param {number} to @param {string} color */
-  const line = (from, to, color) => {
+  /** @param {number} from @param {number} to @param {string} color @param {number} width */
+  const line = (from, to, color, width) => {
     const d = values.slice(from, to).map((v, k) => (v == null ? '' : `${k && values[from + k - 1] != null ? 'L' : 'M'}${(((from + k) / (n - 1)) * W).toFixed(1)},${(H - 1 - (v / max) * (H - 2)).toFixed(1)}`)).join('');
-    if (d) svg('path', { d, fill: 'none', stroke: color, 'stroke-width': color === 'var(--s1)' ? 2 : 1.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, root);
+    if (d) svg('path', { d, fill: 'none', stroke: color, 'stroke-width': width, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, root);
   };
-  line(0, n - recent + 1, 'var(--spark)');
-  line(n - recent, n, 'var(--s1)');
+  line(0, n - recent + 1, 'var(--spark)', 1.5);
+  line(n - recent, n, 'var(--s1)', 2);
   return root;
 }
 
 /** A chart's table twin, in a closed disclosure: one row per bucket, newest first. */
-/** @param {HTMLElement} details @param {string[]} heads @param {string[][]} rows */
-function table(details, heads, rows) {
+/** @param {HTMLElement} details @param {string[]} heads @param {string[][]} rows @param {string} [title] */
+function table(details, heads, rows, title = 'Table') {
   const summary = html('summary');
-  summary.append(icon('chevron'), 'Table');
+  summary.append(icon('chevron'), title);
   const t = html('table');
   const head = /** @type {HTMLTableElement} */ (t).createTHead().insertRow();
   for (const h of heads) head.append(html('th', '', h));
@@ -525,6 +537,29 @@ function table(details, heads, rows) {
   const scroll = html('div', 'scroll');
   scroll.append(t);
   details.replaceChildren(summary, scroll);
+}
+
+/** A chart's legend: each series' key and name, and its figure when given. */
+/** @param {HTMLElement} el @param {(Series & { figure?: string })[]} series */
+function legend(el, series) {
+  el.replaceChildren(
+    ...series.map((s) => {
+      const item = html('span');
+      const key = html('span', 'key');
+      key.style.background = s.color;
+      item.append(key, s.name);
+      if (s.figure) item.append(' ', html('b', '', s.figure));
+      return item;
+    }),
+  );
+}
+
+/** Rebuilds part of the page, keeping focus on the button that had it (by position: the rebuild keeps the order). */
+/** @param {HTMLElement} el @param {() => void} build */
+function keepFocus(el, build) {
+  const at = [...el.querySelectorAll('button')].indexOf(/** @type {HTMLButtonElement} */ (document.activeElement));
+  build();
+  if (at >= 0) /** @type {HTMLElement | undefined} */ (el.querySelectorAll('button')[at])?.focus();
 }
 
 /** A row of toggle buttons; the pressed one is the current choice. */
@@ -544,19 +579,19 @@ function choices(el, options, current, pick) {
 /** A ranked list: name over a bar of its share of the top one, value, share of all; the first few, then all. */
 /** @type {Set<string>} */
 const expanded = new Set();
-/** @param {HTMLElement} el @param {string} id @param {Row[]} rows @param {(n: number) => string} fmt @param {string} valueHead */
-function rankList(el, id, rows, fmt, valueHead) {
+/** @param {HTMLElement} el @param {string} id @param {Row[]} rows @param {(n: number) => string} fmt @param {string} valueHead @param {string} span The days it adds up, when the chart above goes by hour */
+function rankList(el, id, rows, fmt, valueHead, span) {
   rows.sort((a, b) => b.value - a.value);
   if (!rows.length) return el.replaceChildren(html('p', 'empty', 'No data in this range.'));
   const total = rows.reduce((s, r) => s + r.value, 0);
   const open = expanded.has(id);
   const head = html('div', 'rank-head');
-  head.append(html('span', '', `${rows.length} in all`), html('span', '', valueHead), html('span', '', 'Share'));
+  head.append(html('span', '', `${span ? `${span}, ` : ''}${rows.length} in all`), html('span', '', valueHead), html('span', '', 'Share'));
   const list = html('ol', 'rank');
   for (const r of open ? rows : rows.slice(0, LIST)) {
     const li = html('li');
     const name = html('span', 'name');
-    name.style.setProperty('--w', `${(r.value / rows[0].value) * 100}%`);
+    name.style.setProperty('--w', `${(r.value / (rows[0].value || 1)) * 100}%`);
     if (r.sub) name.append(html('small', '', r.sub));
     // A path may break after any slash, never inside a word.
     name.append(...r.label.split(/(?<=\/)/).flatMap((part, k) => (k ? [html('wbr'), part] : [part])));
@@ -571,21 +606,24 @@ function rankList(el, id, rows, fmt, valueHead) {
     more.setAttribute('aria-expanded', String(open));
     more.addEventListener('click', () => {
       open ? expanded.delete(id) : expanded.add(id);
-      rankList(el, id, rows, fmt, valueHead);
+      keepFocus(el, () => rankList(el, id, rows, fmt, valueHead, span));
     });
     el.append(more);
   }
 }
 
-/** One breakdown summed over its own frame's days, with what its numbers cover. */
-/** @param {Breakdown} bd */
-function tally(bd) {
-  const f = frame(bd.key, null);
-  const cover = coverage(bd.key, f.listDays, f.start, f.last);
+/** One breakdown summed over its own frame's days, as a ranked list over its lead and notes. */
+/** @param {HTMLElement} el @param {string} key */
+function breakdown(el, key) {
+  const bd = BREAKDOWNS[key];
+  const f = frame(key, null);
+  const cover = coverage(key, f.listDays, f.start, f.last);
   /** @type {Map<string, number>} */
   const counts = new Map();
-  for (const d of f.listDays) for (const [k, v] of Object.entries(d[bd.key]?.counts ?? {})) counts.set(k, (counts.get(k) ?? 0) + v);
-  return { counts, fmt: estimated(count, cover.approx), notes: [bd.about, f.note, cover.note] };
+  for (const d of f.listDays) for (const [k, v] of Object.entries(d[key]?.counts ?? {})) counts.set(k, (counts.get(k) ?? 0) + v);
+  const list = html('div');
+  rankList(list, key, [...counts].map(([k, value]) => ({ label: bd.label?.(k) ?? k, value })), estimated(count, cover.approx), bd.unit ?? 'Requests', listSpan(f));
+  el.replaceChildren(list, html('p', 'note', [bd.lead?.(counts), bd.about, f.note, cover.note].filter(Boolean).join(' ')));
 }
 
 // ------------------------------------------------------------------------------------------------------------- page
@@ -612,7 +650,7 @@ const CHECKS = [
     about: 'Off above 0.5% of requests and 3× usual.' },
   { label: 'Client errors (4xx)', read: (hs) => statusShare(hs, (k) => k[0] === '4'), fmt: pct, limit: 0.1, times: 2,
     about: 'Mostly scanners and mistyped addresses. Off above 10% and 2× usual.' },
-  { label: 'Origin time (p95)', read: (hs) => originTime(hs, 'p95'), fmt: ms, limit: 1000, times: 2,
+  { label: 'Origin time, 95th percentile', read: (hs) => originTime(hs, 'p95'), fmt: ms, limit: 1000, times: 2,
     about: "How long Bitview's servers took for the slowest 5% of requests. Off above 1 s and 2× usual." },
   { label: 'Firewall events a day', read: (hs) => (having(hs, firewallOf).length ? (sum(hs, firewallOf) / having(hs, firewallOf).length) * 24 : null), fmt: (n) => `≈${count(Math.round(n))}`, limit: 1000, times: 5,
     about: 'Requests a Cloudflare security feature acted on. Off above 1,000 a day and 5× usual.' },
@@ -622,20 +660,22 @@ const CHECKS = [
 
 /** The status card: a verdict, then every check with its last week by hour, the tunnels and the pull. */
 function status() {
-  const recent = hourBuckets(now.through, 24).recs.flat();
   const week = hourBuckets(now.through, 192).recs;
-  const before = week.slice(0, 168).flat();
+  const recent = week.slice(168).flat(), before = week.slice(0, 168).flat();
   /** @type {{ label: string, value: string, usual: string, off: boolean, about: string, spark?: (number | null)[], extra?: HTMLElement }[]} */
   const items = CHECKS.map((c) => {
     const v = c.read(recent), usual = c.read(before);
     const scaled = usual == null || !c.times ? true : c.low ? v != null && v < usual * c.times : v != null && v > usual * c.times;
     const off = v != null && (c.low ? v < c.limit || scaled : v > c.limit && scaled);
-    return { label: c.label, value: cell(v, c.fmt), usual: usual == null ? '' : `usual ${c.fmt(usual)}`, off, about: c.about, spark: week.map((h) => c.read(h)) };
+    // Either way the line it is off past is the stricter of the two: the limit, or the usual level scaled.
+    const line = usual == null || !c.times ? c.limit : Math.max(c.limit, usual * c.times);
+    const about = `${c.about} With the usual of the last 7 days, that is ${c.low ? 'below' : 'above'} ${c.fmt(line)}.`;
+    return { label: c.label, value: cell(v, c.fmt), usual: usual == null ? '' : `usual ${c.fmt(usual)}`, off, about, spark: week.map((h) => c.read(h)) };
   });
   const serving = now.tunnels.filter((t) => t.public);
   const down = serving.filter((t) => t.status !== 'healthy');
   const tunnels = html('details', 'table');
-  table(tunnels, ['Serves', 'Public', 'Status', 'Connections'], now.tunnels.map((t) => [t.hosts.join(', '), t.public ? 'yes' : 'no, development', t.status, String(t.connections)]));
+  table(tunnels, ['Serves', 'Public', 'Status', 'Connections'], now.tunnels.map((t) => [t.hosts.join(', '), t.public ? 'yes' : 'no, development', t.status, String(t.connections)]), 'Tunnels');
   items.unshift({
     label: 'Tunnels to Bitview',
     value: down.length ? `${down.length} of ${serving.length} down: ${down.map((t) => `${t.hosts.join(', ')} (${t.status})`).join('; ')}` : `${serving.length} of ${serving.length} healthy`,
@@ -651,13 +691,13 @@ function status() {
     value: age >= 1 ? `${Math.floor(age)} h ago` : 'On time',
     usual: 'pulled hourly',
     off: age > 3,
-    about: "Pulled from Cloudflare every hour. Off when the last pull is over 3 hours old: every number here is as of then. Check the hourly job that runs pull.py, and its Cloudflare token.",
+    about: `Pulled from Cloudflare every hour, last at ${pulled} on ${dayFormat.format(new Date(now.pulled))}. Off when the last pull is over 3 hours old: every number here is as of then. Check the hourly job that runs pull.py, and its Cloudflare token.`,
   });
   const off = items.filter((i) => i.off);
   $('updated').textContent = age > 3 ? `Updated ${Math.floor(age)} h ago` : `Updated ${pulled}`;
   $('updated').dataset.off = String(age > 3);
   $('verdict').textContent = off.length ? `${off.length} thing${off.length > 1 ? 's' : ''} to look at` : 'All fine';
-  icon(off.length ? 'off' : 'ok', $('verdict-icon'));
+  $('verdict-icon').replaceWith(Object.assign(icon(off.length ? 'off' : 'ok'), { id: 'verdict-icon' }));
   $('status').dataset.off = String(off.length > 0);
   $('verdict-sub').textContent = `The last 24 hours, to ${clockFormat.format(new Date(now.through))} UTC, against the 7 days before. Open a check for how it's judged.`;
   $('checks').replaceChildren(
@@ -671,7 +711,7 @@ function status() {
       val.append(html('span', '', i.value));
       if (i.usual) val.append(html('span', 'usual', i.usual));
       if (i.spark) val.append(sparkline(i.spark, 24));
-      summary.append(icon(i.off ? 'off' : 'ok'), html('span', 'label', i.label), val, icon('chevron'));
+      summary.append(icon(i.off ? 'off' : 'ok', i.off ? 'Off' : 'Fine'), html('span', 'label', i.label), val, icon('chevron'));
       const about = html('div', 'about', i.about);
       if (i.extra) about.append(i.extra);
       details.append(summary, about);
@@ -681,27 +721,29 @@ function status() {
   );
 }
 
-function render() {
+/** The range and metric, once overview() has checked them, in the address. */
+function saveState() {
   const url = new URL(location.href);
   url.searchParams.set('range', state.range);
   url.searchParams.set('metric', state.metric);
   history.replaceState(null, '', url);
+}
 
+function render() {
   // The range control offers what the longest-kept chart, the daily totals, covers.
   const offered = RANGES.filter((r) => covers(r, 'requests', 'requests')).map(([id]) => id);
   if (!offered.includes(state.range)) state.range = '24h';
   for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ ($('ranges').querySelectorAll('button'))) {
     b.hidden = !offered.includes(b.value);
     b.setAttribute('aria-pressed', String(b.value === state.range));
-    b.onclick = () => ((state.range = b.value), render());
   }
-
   overview();
   kinds();
   errors();
   speed();
   firewall();
   cards();
+  saveState();
 }
 
 /** The headline numbers, each a tab of the main chart, which draws the period before in grey. */
@@ -709,16 +751,19 @@ function overview() {
   const main = frame('requests');
   const { b, prev } = main;
   const [, , length, hourly] = main.range;
-  const { unitNote, head, over, rows } = framed(main);
+  const { word, unitNote, head, over, rows } = framed(main);
   const recs = b.recs.flat();
   const missing = b.size.reduce((s, n) => s + n, 0) - recs.length;
-  const word = b.unit === 'hour' ? 'hour' : 'day';
   const span = length || daysBetween(main.start, main.last) + 1;
   const period = length === 1 ? '24 hours' : `${span} days`;
   const through = new Date(now.through);
-  $('through').textContent = hourly
-    ? `The last ${period} by hour, to ${dayFormat.format(through)}, ${clockFormat.format(through)} UTC${missing ? `, ${missing} hours missing` : ''}. Lists cover ${main.listDays.length === 1 ? longDayFormat.format(toDate(main.listDays[0].date)) : `${dayFormat.format(toDate(main.start))} to ${dayFormat.format(toDate(main.last))}`}, by day. Changes are against the ${period} before.`
-    : `${longDayFormat.format(toDate(main.start))} to ${longDayFormat.format(toDate(main.last))}, UTC${missing ? `, ${daysWord(missing)} missing` : ''}. A chart with less history shows what it has, and says so.`;
+  const days = main.start === main.last ? longDayFormat.format(toDate(main.last)) : `${longDayFormat.format(toDate(main.start))} to ${longDayFormat.format(toDate(main.last))}`;
+  $('through').textContent = [
+    hourly
+      ? `The last ${period} by hour, to ${dayFormat.format(through)}, ${clockFormat.format(through)} UTC${missing ? `, ${missing} hours missing` : ''}. Lists add up whole days, ${listSpan(main)}.`
+      : `${days}, UTC${missing ? `, ${daysWord(missing)} missing` : ''}. A chart with less history shows what it has, and says so.`,
+    prev && `Changes are against the ${period} before.`,
+  ].filter(Boolean).join(' ');
 
   const metrics = METRICS.filter((m) => !(hourly && m.daily));
   if (!metrics.some((m) => m.id === state.metric)) state.metric = 'requests';
@@ -734,7 +779,11 @@ function overview() {
       const delta = v == null || p == null || !p ? '' : m.total === 'ratio' ? `${v >= p ? '↑' : '↓'} ${(Math.abs(v - p) * 100).toFixed(1)} pts` : `${v >= p ? '↑' : '↓'} ${pct(Math.abs(v / p - 1))}`;
       const sub = missing ? `Over ${recs.length} of ${recs.length + missing} ${word}s` : delta || (length ? 'No earlier period' : 'Every kept day');
       btn.append(html('span', 'k', m.label), html('span', 'v', v == null ? 'no data' : estimated(m.fmt, approx && m.total !== 'ratio')(v)), html('span', 'd', sub));
-      btn.addEventListener('click', () => ((state.metric = m.id), render()));
+      btn.addEventListener('click', () => {
+        state.metric = m.id;
+        keepFocus($('kpis'), overview);
+        saveState();
+      });
       return btn;
     }),
   );
@@ -746,15 +795,16 @@ function overview() {
   const earlier = prev && prev.keys.length === b.keys.length ? prev.recs.map((rs) => measure(perBucket, rs)) : null;
   /** @type {Series[]} */
   const series = [{ name: metric.label, color: 'var(--s1)', values }];
-  if (earlier) series.push({ name: `The ${period} before`, color: 'var(--spark)', values: earlier });
-  $('metric-about').textContent = [`${title}.`, metric.about, earlier && `Grey: the ${period} before.`, approx && '≈ Some hours are estimates from sampled data.', main.note].filter(Boolean).join(' ');
+  if (earlier) series.push({ name: `The ${period} before`, color: 'var(--spark)', values: earlier, muted: true });
+  legend($('main-legend'), earlier ? series : []);
+  $('metric-about').textContent = [`${title}.`, metric.about, approx && '≈ Some hours are estimates from sampled data.', main.note].filter(Boolean).join(' ');
   drawChart($('main-chart'), over({ series, fmt: metric.fmt, height: 260, title }, metric.num));
   table($('main-table'), [head, title, ...(earlier ? [`The ${period} before`] : [])], rows(metric.num, [(i) => cell(values[i], metric.fmt), ...(earlier ? [(/** @type {number} */ i) => cell(earlier[i], metric.fmt)] : [])]));
 }
 
 /** Small multiples, each on its own scale, under a heading and its figure. */
-/** @param {HTMLElement} el @param {{ name: string, figure: string, aside?: string, values: (number | null)[] }[]} items @param {(spec: Omit<ChartSpec, 'labels' | 'when' | 'rank'>) => ChartSpec} spec @param {(n: number) => string} fmt @param {string} unit */
-function multiples(el, items, spec, fmt, unit) {
+/** @param {HTMLElement} el @param {{ name: string, figure: string, aside?: string, values: (number | null)[] }[]} items @param {(spec: Omit<ChartSpec, 'labels' | 'when' | 'rank'>) => ChartSpec} spec @param {(n: number) => string} fmt @param {boolean} approx @param {string} unit */
+function multiples(el, items, spec, fmt, approx, unit) {
   const boxes = items.map((it) => {
     const box = html('div');
     const h = html('h3', '', it.name);
@@ -767,20 +817,19 @@ function multiples(el, items, spec, fmt, unit) {
   el.replaceChildren(...boxes.map((b) => b.box));
   for (const { it, chart } of boxes)
     if ((chart.hidden = it.values.length < 2)) chart.replaceChildren();
-    else drawChart(chart, spec({ series: [{ name: it.name, color: 'var(--s1)', values: it.values }], fmt, height: 120, ticks: 2, title: `${it.name}${unit}` }));
+    else drawChart(chart, spec({ series: [{ name: it.name, color: 'var(--s1)', values: it.values }], fmt, approx, height: 120, ticks: 2, title: `${it.name}${unit}` }));
 }
 
 /** API, pages and MCP: daily, from the routes, each on its own scale, as MCP is a sliver of API. */
 function kinds() {
   const f = frame('routes', null);
-  const { over, rows } = framed(f);
+  const { unitNote, head, over, rows } = framed(f);
   const routed = f.listDays.filter((d) => d.routes);
   const cover = coverage('routes', f.listDays, f.start, f.last);
   const fmt = estimated(count, cover.approx);
   /** @param {Rec} d @param {string} kind */
   const kindOf = (d, kind) => Object.values(d.routes?.counts[kind] ?? {}).reduce((s, /** @type {[number, number]} */ [r]) => s + r, 0);
   const all = sum(routed, (d) => KINDS.reduce((s, k) => s + kindOf(d, k), 0));
-  const unit = f.b.unit === 'day' ? ' a day' : ` a day, ${f.b.unit}ly averages`;
   const items = KINDS.map((kind) => {
     const total = sum(routed, (d) => kindOf(d, kind));
     const values = f.b.recs.map((ds) => {
@@ -789,9 +838,9 @@ function kinds() {
     });
     return { name: `${kind} requests`, figure: routed.length ? fmt(total) : 'no data', aside: all ? `${pct(total / all)} of all` : '', values };
   });
-  multiples($('kinds'), items, (s) => over(s, (d) => d.routes), fmt, unit);
-  $('kinds-note').textContent = [`Requests${unit}, by what they asked for.`, f.note, cover.note].filter(Boolean).join(' ');
-  table($('kinds-table'), ['Day', ...KINDS.map((k) => `${k}${unit}`)], rows((d) => d.routes, items.map((k) => (i) => cell(k.values[i], fmt))));
+  multiples($('kinds'), items, (s) => over(s, (d) => d.routes), count, cover.approx, unitNote);
+  $('kinds-note').textContent = [`Requests${unitNote}, by what they asked for.`, f.note, cover.note].filter(Boolean).join(' ');
+  table($('kinds-table'), [head, ...KINDS.map((k) => `${k}${unitNote}`)], rows((d) => d.routes, items.map((k) => (i) => cell(k.values[i], fmt))));
 }
 
 /** Errors: small multiples, each on its own scale, as 5xx is a sliver of 4xx. */
@@ -804,10 +853,9 @@ function errors() {
     ['Server errors (5xx)', (/** @type {string} */ k) => k[0] === '5'],
     ["Couldn't reach Bitview (502, 504, 52x)", unreachable],
   ]).map(([name, test]) => ({ name, figure: cell(statusShare(recs, test), finePct), values: f.b.recs.map((rs) => statusShare(rs, test)) }));
-  multiples($('errors'), items, (s) => over(s, statusOf), finePct, `, share of requests${unitNote}`);
+  multiples($('errors'), items, (s) => over(s, statusOf), finePct, false, `, share of requests${unitNote}`);
   $('errors-note').textContent = ['Shares of all requests.', f.note].filter(Boolean).join(' ');
   table($('errors-table'), [head, ...items.map((e) => e.name)], rows(statusOf, items.map((e) => (i) => cell(e.values[i], finePct))));
-
 }
 
 /** Speed: how long Bitview's servers took to answer what Cloudflare passed on. */
@@ -819,15 +867,7 @@ function speed() {
     name, color, values: b.recs.map((rs) => originTime(rs, q)), total: originTime(recs, q),
   }));
   const has = (/** @type {Rec} */ d) => d.origin?.p50;
-  $('speed-legend').replaceChildren(
-    ...lines.map((s) => {
-      const item = html('span');
-      const key = html('span', 'key');
-      key.style.background = s.color;
-      item.append(key, `${s.name} `, html('b', '', cell(s.total, ms)));
-      return item;
-    }),
-  );
+  legend($('speed-legend'), lines.map((s) => ({ ...s, figure: cell(s.total, ms) })));
   $('speed-note').textContent = `Only requests Cloudflare passed to Bitview's servers, not those it answered from its cache. ≈ From Cloudflare's sampled data.${b.unit === 'hour' ? '' : ' A day is its own median and 95th percentile; longer buckets average them.'}${f.note ? ` ${f.note}` : ''}`;
   drawChart($('speed-chart'), over({ series: lines, fmt: ms, height: 200, title: `Origin response time${unitNote}` }, has));
   table($('speed-table'), [head, ...lines.map((s) => s.name)], rows(has, lines.map((s) => (i) => cell(s.values[i], ms))));
@@ -837,6 +877,7 @@ function speed() {
 function firewall() {
   const f = frame('firewallActions', 'firewall');
   const { b, listDays, unitNote, head, over, rows } = { ...f, ...framed(f) };
+  const events = (/** @type {number} */ n) => `≈${count(n)}`;
   const recs = b.recs.flat();
   const values = b.recs.map((rs) => (having(rs, firewallOf).length ? sum(rs, firewallOf) / (b.unit === 'week' || b.unit === 'month' ? having(rs, firewallOf).length : 1) : null));
   const total = having(recs, firewallOf).length ? sum(recs, firewallOf) : null;
@@ -844,57 +885,61 @@ function firewall() {
   const actions = new Map();
   for (const d of listDays) for (const [k, v] of Object.entries(d.firewallActions?.counts ?? {})) actions.set(k, (actions.get(k) ?? 0) + v);
   const actionTotal = [...actions.values()].reduce((s, v) => s + v, 0);
-  $('firewall-total').textContent = total == null ? 'no data' : `≈${count(total)} events`;
-  drawChart($('firewall-chart'), over({ series: [{ name: 'Firewall events', color: 'var(--s1)', values }], fmt: count, height: 160, title: `Firewall events${unitNote}` }, firewallOf));
-  table($('firewall-table'), [head, `Firewall events${unitNote}`], rows(firewallOf, [(i) => cell(values[i], (n) => `≈${count(n)}`)]));
+  $('firewall-total').textContent = total == null ? 'no data' : `${events(total)} events`;
+  drawChart($('firewall-chart'), over({ series: [{ name: 'Firewall events', color: 'var(--s1)', values }], fmt: count, approx: true, height: 160, title: `Firewall events${unitNote}` }, firewallOf));
+  table($('firewall-table'), [head, `Firewall events${unitNote}`], rows(firewallOf, [(i) => cell(values[i], events)]));
 
   $('firewall-note').textContent = `Requests a Cloudflare security feature acted on. ≈ From Cloudflare's sampled events.${actionTotal ? ` Actions: ${[...actions].sort((a, z) => z[1] - a[1]).map(([k, v]) => `${words(k)} ${pct(v / actionTotal)}`).join(', ')}.` : ''}${f.note ? ` ${f.note}` : ''}`;
-  const t = tally(BREAKDOWNS.firewallRules);
-  rankList($('firewall-rules'), 'firewallRules', [...t.counts].map(([key, value]) => ({ key, label: source(key), value })), t.fmt, 'Events');
+  breakdown($('firewall-rules'), 'firewallRules');
 }
 
-/** The breakdown cards: routes with its kind and measure, then the rest, each with its tabs. */
+/** The breakdown cards: routes with its kind and measure, then the rest, each with its tabs. A choice rebuilds only
+ * its own card. */
 function cards() {
-  const grid = $('cards');
-  grid.replaceChildren(routesCard(), ...CARDS.map(([title, keys]) => {
-    const key = state.tabs[title];
-    const bd = BREAKDOWNS[key];
-    const t = tally(bd);
+  const routes = html('section', 'panel');
+  routesCard(routes);
+  $('cards').replaceChildren(routes, ...CARDS.map(([title, keys]) => {
     const card = html('section', 'panel');
-    const header = html('header');
-    const h = html('h2', '', title);
-    header.append(h);
-    if (keys.length > 1) {
-      const tabs = html('div', 'tabs');
-      tabs.setAttribute('role', 'group');
-      tabs.setAttribute('aria-label', title);
-      choices(tabs, keys.map((k) => [k, BREAKDOWNS[k].title]), key, (k) => ((state.tabs[title] = k), cards()));
-      header.append(tabs);
-    }
-    const list = html('div');
-    rankList(list, key, [...t.counts].map(([k, value]) => ({ key: k, label: bd.label?.(k) ?? k, value })), t.fmt, bd.unit ?? 'Requests');
-    const lead = key === 'bots' ? botsLead(t.counts) : '';
-    card.append(header, list, html('p', 'note', [lead, ...t.notes].filter(Boolean).join(' ')));
+    breakdownCard(card, title, keys);
     return card;
   }));
 }
 
+/** @param {HTMLElement} card @param {string} title @param {string[]} keys */
+function breakdownCard(card, title, keys) {
+  const header = html('header');
+  header.append(html('h2', '', title));
+  if (keys.length > 1) {
+    const tabs = html('div', 'tabs');
+    tabs.setAttribute('role', 'group');
+    tabs.setAttribute('aria-label', title);
+    choices(tabs, keys.map((k) => [k, BREAKDOWNS[k].title]), state.tabs[title], (k) => {
+      state.tabs[title] = k;
+      keepFocus(card, () => breakdownCard(card, title, keys));
+    });
+    header.append(tabs);
+  }
+  const body = html('div');
+  breakdown(body, state.tabs[title]);
+  card.replaceChildren(header, body);
+}
+
 /** Top routes, by requests or bandwidth, in one kind or all. */
-function routesCard() {
+/** @param {HTMLElement} card */
+function routesCard(card) {
   const f = frame('routes', null);
   const cover = coverage('routes', f.listDays, f.start, f.last);
-  const card = html('section', 'panel');
+  const rebuild = () => keepFocus(card, () => routesCard(card));
   const header = html('header');
   const tabs = html('div', 'tabs');
   tabs.setAttribute('role', 'group');
   tabs.setAttribute('aria-label', 'Kind');
-  choices(tabs, [['All', 'All'], ...KINDS.map((k) => /** @type {[string, string]} */ ([k, k]))], state.kind, (id) => ((state.kind = id), cards()));
+  choices(tabs, [['All', 'All'], ...KINDS.map((k) => /** @type {[string, string]} */ ([k, k]))], state.kind, (id) => ((state.kind = id), rebuild()));
   header.append(html('h2', '', 'Routes'), tabs);
-  const by = html('div', 'seg');
+  const by = html('div', 'seg by');
   by.setAttribute('role', 'group');
   by.setAttribute('aria-label', 'Rank by');
-  choices(by, [['requests', 'Requests'], ['bytes', 'Bandwidth']], state.by, (id) => ((state.by = id), cards()));
-  by.style.marginBottom = '12px';
+  choices(by, [['requests', 'Requests'], ['bytes', 'Bandwidth']], state.by, (id) => ((state.by = id), rebuild()));
   /** @type {Map<string, number>} */
   const routes = new Map();
   for (const d of f.listDays)
@@ -904,10 +949,9 @@ function routesCard() {
   const list = html('div');
   rankList(list, 'routes', [...routes].map(([key, value]) => {
     const slash = key.indexOf('/'), host = key.slice(0, slash);
-    return { key, sub: host === HOME ? undefined : host, label: key.slice(slash), value };
-  }), estimated(state.by === 'bytes' ? bytes : count, cover.approx), state.by === 'bytes' ? 'Bandwidth' : 'Requests');
-  card.append(header, by, list, html('p', 'note', ["Each path reduced to its route: the API template, or the page's first folder, else (other).", f.note, cover.note].filter(Boolean).join(' ')));
-  return card;
+    return { sub: host === HOME ? undefined : host, label: key.slice(slash), value };
+  }), estimated(state.by === 'bytes' ? bytes : count, cover.approx), state.by === 'bytes' ? 'Bandwidth' : 'Requests', listSpan(f));
+  card.replaceChildren(header, by, list, html('p', 'note', ["Each path reduced to its route: the API template, or the page's first folder, else (other).", f.note, cover.note].filter(Boolean).join(' ')));
 }
 
 /** Bot or human, as far as this plan can tell: only bots Cloudflare has verified are known. */
@@ -937,11 +981,10 @@ function inventory(inv) {
       const li = html('li');
       const a = html('a');
       a.setAttribute('href', `#mark-${ic}`);
-      a.append(icon(ic), html('b', '', `${title}: ${rows.length} kinds`));
+      a.append(icon(ic), html('b', '', `${title}: ${rows.length} kind${rows.length === 1 ? '' : 's'}`), icon('chevron'));
       // What is held back is named in full; the rest is counted. Sentence case, keeping acronyms (IP, ASN).
       const lower = (/** @type {string} */ w) => (/^.[a-z]/.test(w) ? w[0].toLowerCase() + w.slice(1) : w);
-      const names = rows.map((r, k) => (k ? lower(r.what) : r.what));
-      a.append(html('p', '', mark === 'not published' ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}.` : meaning));
+      a.append(html('p', '', mark === 'not published' ? `${listFormat.format(rows.map((r, k) => (k ? lower(r.what) : r.what)))}.` : meaning));
       li.append(a);
       return li;
     }),
@@ -977,8 +1020,7 @@ function inventory(inv) {
   const list = [...inv.datasets].sort((a, z) => rank(a) - rank(z) || a.name.localeCompare(z.name));
   table($('datasets'), ['Dataset', 'Records', 'Kept', 'Fields', 'Read by pull.py'], list.map((d) => [
     d.name, d.visitors ? SCOPES[/** @type {keyof SCOPES} */ (d.scope)] : "Cloudflare's other products", d.kept, String(d.fields.length), d.read ? 'yes' : '',
-  ]));
-  /** @type {HTMLElement} */ ($('datasets').querySelector('summary')).lastChild.textContent = `All ${inv.datasets.length} datasets`;
+  ]), `All ${inv.datasets.length} datasets`);
 }
 
 async function load() {
@@ -1001,8 +1043,19 @@ async function load() {
   for (const [k, h] of [...hours].sort((a, z) => (a[0] < z[0] ? -1 : 1))) for (const key of Object.keys(h)) if (!firstHour.has(key)) firstHour.set(key, k);
   for (const [id, from] of [['from-totals', firstDay.get('requests')], ['from-sampled', firstDay.get('routes')], ['from-hours', firstHour.get('requests')?.slice(0, 10)]])
     $(id).textContent = from ? longDayFormat.format(toDate(from)) : 'not yet';
-  await document.fonts.load('12px Inter');
-  measurer.font = `12px ${getComputedStyle(document.body).fontFamily}`;
+  // Charts lay out their labels by measuring them in the page's font: wait for Inter, but only a moment, so a blocked
+  // font costs a few pixels of label spacing, never the page.
+  const size = getComputedStyle(document.documentElement).getPropertyValue('--t1').trim();
+  await Promise.race([document.fonts.load(`${size} Inter`).catch(() => {}), new Promise((done) => setTimeout(done, 1500))]);
+  measurer.font = `${size} ${getComputedStyle(document.body).fontFamily}`;
+  // The range buttons, once; render() shows those the data covers.
+  $('ranges').replaceChildren(...RANGES.map(([id, label]) => {
+    const b = html('button', '', label);
+    b.type = 'button';
+    b.value = id;
+    b.addEventListener('click', () => ((state.range = id), render()));
+    return b;
+  }));
   status();
   render();
   document.documentElement.classList.remove('loading');

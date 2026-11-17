@@ -9,7 +9,11 @@
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7f9">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0b0d">
 <link rel="icon" type="image/svg+xml" href="https://bitview.space/assets/favicon/favicon.svg">
-<script>document.documentElement.classList.add('loading')</script>
+<script>
+  // Hides what the data fills in until it has arrived (app.js shows it); shown anyway if app.js never runs.
+  document.documentElement.classList.add('loading');
+  setTimeout(() => document.documentElement.classList.remove('loading'), 8000);
+</script>
 <link rel="preload" href="https://bitview.space/assets/fonts/InterVariable.core.woff2" as="font" type="font/woff2" crossorigin>
 <style>
 /* Bitview's face and its Logs page's colours: cool paper by day, near-black by night; colour only for data and status. */
@@ -58,8 +62,6 @@
   --gutter: max(16px, env(safe-area-inset-left));
   --radius: 12px;
 }
-:root[data-theme="light"] { color-scheme: light; }
-:root[data-theme="dark"] { color-scheme: dark; }
 @media (prefers-contrast: more) {
   :root {
     --text: light-dark(#1e222b, #d4d7de);
@@ -91,7 +93,6 @@ h2 { font-size: var(--t4); }
 h3 { font-size: var(--t3); }
 p { margin: 0; text-wrap: pretty; }
 small, .note { font-size: var(--t2); color: var(--soft); }
-.num { font-variant-numeric: tabular-nums; }
 .icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 
 .wrap { max-width: 1120px; margin: 0 auto; padding: 0 var(--gutter); }
@@ -111,8 +112,9 @@ small, .note { font-size: var(--t2); color: var(--soft); }
 .lead { font-size: var(--t4); line-height: 1.5; color: var(--text); max-width: 34em; text-wrap: balance; }
 .marks ul { display: grid; margin: 0; padding: 0; list-style: none; }
 .marks li + li { border-top: 1px solid var(--line); }
-.marks a { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 4px 10px; padding: 14px 0; text-decoration: none; }
+.marks a { display: grid; grid-template-columns: 20px minmax(0, 1fr) 16px; gap: 4px 10px; padding: 14px 0; text-decoration: none; }
 .marks .icon { margin-top: 3px; color: var(--soft); }
+.marks a:hover .icon:last-of-type { color: var(--ink); }
 .marks b { color: var(--ink); font-weight: 600; }
 .marks a:hover b { text-decoration: underline; text-decoration-color: var(--line2); }
 .marks p { grid-column: 2; color: var(--soft); font-size: var(--t2); }
@@ -236,13 +238,13 @@ th { font-weight: 500; color: var(--soft); position: sticky; top: 0; background:
 td { border-top: 1px solid var(--line); color: var(--ink); }
 
 /* Panels and their grids */
-.grid { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
 /* Cards of uneven heights, flowed into balanced columns. */
 .cols { columns: 2 440px; column-gap: 16px; }
 .cols .panel { break-inside: avoid; margin-bottom: 16px; }
 #cards { display: contents; }
 .panel > header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 12px; }
 .panel > header .tabs { margin: -6px 0; }
+.panel .by { margin-bottom: 12px; }
 .panel .note { margin-top: 10px; }
 .figure { font-size: var(--t5); font-weight: 600; color: var(--ink); letter-spacing: -0.02em; line-height: 1.2; }
 .multiples { display: grid; gap: 20px 24px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
@@ -262,13 +264,12 @@ td { border-top: 1px solid var(--line); color: var(--ink); }
 .rank .name small { color: var(--soft); font-size: inherit; }
 .rank .v { color: var(--ink); font-variant-numeric: tabular-nums; }
 .rank .s { color: var(--soft); font-variant-numeric: tabular-nums; }
-.more { display: inline-flex; align-items: center; gap: 4px; }
+.more {
+  position: relative; display: inline-flex; align-items: center; gap: 4px; min-height: 32px; margin-top: 4px; padding: 0;
+  font: inherit; font-size: var(--t2); color: var(--soft); background: none; border: 0; cursor: pointer;
+}
 .more .icon { width: 14px; height: 14px; transform: rotate(90deg); }
 .more[aria-expanded="true"] .icon { transform: rotate(-90deg); }
-.more {
-  position: relative; font: inherit; font-size: var(--t2); color: var(--soft); background: none; border: 0; cursor: pointer;
-  padding: 0; min-height: 32px; margin-top: 4px;
-}
 .more::before { content: ""; position: absolute; inset: -6px -8px; }
 .more:hover { color: var(--ink); }
 .empty { color: var(--soft); font-size: var(--t2); padding: 16px 0; }
@@ -333,8 +334,8 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
   <div class="hero">
     <section class="intro" aria-labelledby="title">
       <h1 id="title">What Bitview can see</h1>
-      <p class="lead">Bitview is served through Cloudflare, which sees every request. Only counts are published from
-        it, never your IP address, your browser's full user agent, your network or what you looked up.</p>
+      <p class="lead">Bitview is served through Cloudflare, which sees every request. This page publishes only counts of
+        them, never your IP address, your browser's full user agent, your network or what you looked up.</p>
     </section>
 
     <section class="panel status" id="status" aria-labelledby="verdict">
@@ -352,9 +353,7 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
   <main>
     <div class="bar" id="bar">
       <h2 id="traffic">Traffic</h2>
-      <div class="seg" id="ranges" role="group" aria-label="Date range">
-        <button type="button" value="24h">24h</button><button type="button" value="7d">7d</button><button type="button" value="30d">30d</button><button type="button" value="90d">90d</button><button type="button" value="1y">1y</button><button type="button" value="all">All</button>
-      </div>
+      <div class="seg" id="ranges" role="group" aria-label="Date range"></div>
     </div>
     <p class="through" id="through">Loading</p>
 
@@ -362,6 +361,7 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
       <section class="panel overview" aria-labelledby="traffic">
         <div class="kpis" id="kpis" role="group" aria-label="Metric"></div>
         <div class="body">
+          <div class="legend" id="main-legend"></div>
           <div class="chart" id="main-chart" style="--h: 260px"></div>
           <p class="note" id="metric-about"></p>
           <details class="table" id="main-table"></details>
