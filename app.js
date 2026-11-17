@@ -343,7 +343,7 @@ const ICONS = {
   ok: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM8.5 12.2l2.4 2.3 4.6-4.9',
   off: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7.8v5M12 16.2v.1',
   hidden: 'M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.2A9.8 9.8 0 0 1 12 5c5 0 8.5 4.5 9.5 7a13 13 0 0 1-2.4 3.4M6.6 6.6C4.4 8 3 10.2 2.5 12c1 2.5 4.5 7 9.5 7 1.7 0 3.2-.5 4.5-1.2',
-  grouped: 'M4 6h16M7 12h10M10 18h4',
+  grouped: 'M12 3l9 5-9 5-9-5 9-5ZM3 13l9 5 9-5',
   published: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   chevron: 'M9 6l6 6-6 6',
 };
@@ -465,7 +465,8 @@ function drawChart(el, spec) {
     cross.setAttribute('visibility', 'visible');
     tip.hidden = false;
     const w = tip.offsetWidth;
-    tip.style.left = `${px + 12 + w > W ? Math.max(0, px - 12 - w) : px + 12}px`;
+    // A transform, not `left`: following the pointer moves no layout.
+    tip.style.transform = `translateX(${px + 12 + w > W ? Math.max(0, px - 12 - w) : px + 12}px)`;
   };
   const hide = () => ((tip.hidden = true), cross.setAttribute('visibility', 'hidden'), (at = -1));
   /** @param {PointerEvent} e */
@@ -548,13 +549,16 @@ function rankList(el, id, rows, fmt, valueHead) {
     const name = html('span', 'name');
     name.style.setProperty('--w', `${(r.value / rows[0].value) * 100}%`);
     if (r.sub) name.append(html('small', '', r.sub));
-    name.append(r.label);
-    li.append(name, html('span', 'v', fmt(r.value)), html('span', 's', pct(total ? r.value / total : 0)));
+    // A path may break after any slash, never inside a word.
+    name.append(...r.label.split(/(?<=\/)/).flatMap((part, k) => (k ? [html('wbr'), part] : [part])));
+    const share = total ? r.value / total : 0;
+    li.append(name, html('span', 'v', fmt(r.value)), html('span', 's', share && share < 0.001 ? '<0.1%' : pct(share)));
     list.append(li);
   }
   el.replaceChildren(head, list);
   if (rows.length > LIST) {
     const more = html('button', 'more', open ? 'Show fewer' : `Show all ${rows.length}`);
+    more.append(icon('chevron'));
     more.setAttribute('aria-expanded', String(open));
     more.addEventListener('click', () => {
       open ? expanded.delete(id) : expanded.add(id);
@@ -635,8 +639,8 @@ function status() {
   const pulled = `${clockFormat.format(new Date(now.pulled))} UTC`;
   items.push({
     label: 'This page',
-    value: age >= 1 ? `${Math.floor(age)} h old` : 'Up to date',
-    usual: `pulled ${pulled}`,
+    value: age >= 1 ? `${Math.floor(age)} h ago` : `${Math.round(age * 60)} min ago`,
+    usual: 'pulled hourly',
     off: age > 3,
     about: 'Pulled from Cloudflare every hour. Off when the last pull is over 3 hours old.',
   });
@@ -645,7 +649,7 @@ function status() {
   $('verdict').textContent = off.length ? `${off.length} thing${off.length > 1 ? 's' : ''} to look at` : 'All fine';
   icon(off.length ? 'off' : 'ok', $('verdict-icon'));
   $('status').dataset.off = String(off.length > 0);
-  $('verdict-sub').textContent = `The last 24 hours, to ${clockFormat.format(new Date(now.through))} UTC, against the 7 days before. Tap a check for how it's judged.`;
+  $('verdict-sub').textContent = `The last 24 hours, to ${clockFormat.format(new Date(now.through))} UTC, against the 7 days before. Open a check for how it's judged.`;
   $('checks').replaceChildren(
     ...[...off, ...items.filter((i) => !i.off)].map((i) => {
       const li = html('li');
@@ -656,7 +660,7 @@ function status() {
       val.append(html('span', '', i.value));
       if (i.usual) val.append(html('span', 'usual', i.usual));
       if (i.spark) val.append(sparkline(i.spark, 24));
-      summary.append(icon(i.off ? 'off' : 'ok'), html('span', 'label', i.label), val);
+      summary.append(icon(i.off ? 'off' : 'ok'), html('span', 'label', i.label), val, icon('chevron'));
       const about = html('div', 'about', `${i.off ? 'Off now. ' : ''}${i.about}`);
       if (i.extra) about.append(i.extra);
       details.append(summary, about);
