@@ -39,7 +39,7 @@ names and the status of the tunnels that carry its requests.
 | Full user agent | not published | Detailed enough to single out one browser. | up to 1 month | `userAgent` |
 | Network (ASN) | not published | On a small network it points to a person or a company. | up to 1 month | `clientASNDescription`, `clientAsn` |
 | Query string | not published | Holds what people looked up. | up to 1 month | `clientRequestQuery` |
-| Referring site and page | not published | Where someone came from. Published as hosts until 2026-11-17, from Web Analytics, which was then turned off. | up to 6 months | `clientRefererHost`, `clientRefererPath`, `clientRefererQuery`, `refererHost`, `refererPath` |
+| Referring site and page | not published | Where someone came from. Published as hosts until 2026-11-17, from Web Analytics, which was then turned off and the counts deleted. | up to 6 months | `clientRefererHost`, `clientRefererPath`, `clientRefererQuery`, `refererHost`, `refererPath` |
 | Page address in Web Analytics | not published | The full address of a page someone viewed, which holds what they looked up. | up to 6 months | `cumulativeLayoutShiftPath`, `firstInputDelayPath`, `interactionToNextPaintPath`, `largestContentfulPaintObjectPath`, `largestContentfulPaintPath`, `pageUrl`, `url`, `urlParams`, `urlPath` |
 | Request and session ids | not published | Tie a record to one request or one visitor. | up to 1 month | `apiGatewayMatchedSessionIdentifier`, `messageId`, `originatorRayName`, `rayName`, `sessionId`, `sessionIdHash` |
 | Minutes | not published | Hours at most: on a quiet minute, a breakdown can single out one visit. | up to 1 year | `datetimeFifteenMinutes`, `datetimeFiveMinutes`, `datetimeHalfOfHour`, `datetimeMinute` |
