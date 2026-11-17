@@ -15,7 +15,7 @@
  * @typedef {{ labels: string[], when: (i: number) => string, rank: (i: number) => number, series: Series[], fmt: (n: number) => string, height: number, title: string, ticks?: number }} ChartSpec
  *   fmt: values, with ≈ when they are estimates; the axis shows the same numbers without it
  * @typedef {{ key: string, label: string, sub?: string, value: number }} Row
- * @typedef {{ key: string, title: string, unit?: string, about?: string, label?: (k: string) => string, skip?: (k: string) => boolean }} Breakdown
+ * @typedef {{ key: string, title: string, unit?: string, about?: string, label?: (k: string) => string }} Breakdown
  * @typedef {{ unit: 'hour' | 'day' | 'week' | 'month', keys: string[], recs: Rec[][], size: number[], label: (i: number) => string, when: (i: number) => string, rank: (i: number) => number }} Buckets  rank: how round a bucket is to label, as midnight over 06:00
  * @typedef {{ what: string, mark: string, how: string, fields: string[], kept: string }} Policy  One row of pull.py's POLICY
  * @typedef {{ scope: string, name: string, kept: string, read: boolean, visitors: boolean, fields: string[] }} Dataset
@@ -100,7 +100,6 @@ const BREAKDOWNS = Object.fromEntries(/** @type {Breakdown[]} */ ([
   { key: 'firewallRules', title: 'By rule', unit: 'Events', label: source },
   { key: 'countries', title: 'Countries', label: country },
   { key: 'colos', title: 'Edge locations', about: "Cloudflare's data centers that answered." },
-  { key: 'referrers', title: 'Referring sites', unit: 'Page loads', label: (k) => k || 'None', skip: (k) => k === HOME || k.endsWith(`.${HOME}`), about: "Pages opened in a browser, Bitview's own links left out." },
   { key: 'browsers', title: 'Browsers', unit: 'Page views' },
   { key: 'os', title: 'Systems' },
   { key: 'devices', title: 'Devices', label: words },
@@ -114,7 +113,7 @@ const BREAKDOWNS = Object.fromEntries(/** @type {Breakdown[]} */ ([
 /** Breakdown cards: each a title and its tabs. Routes is its own card, with its own controls. */
 const CARDS = [
   ['Status codes', ['status']],
-  ['Where from', ['countries', 'referrers', 'colos']],
+  ['Where from', ['countries', 'colos']],
   ['Browsers and systems', ['browsers', 'os', 'devices']],
   ['Bots and networks', ['bots', 'ipClasses']],
   ['Delivery', ['contentTypes', 'cache', 'http', 'tls']],
@@ -575,7 +574,7 @@ function tally(bd) {
   const cover = coverage(bd.key, f.listDays, f.start, f.last);
   /** @type {Map<string, number>} */
   const counts = new Map();
-  for (const d of f.listDays) for (const [k, v] of Object.entries(d[bd.key]?.counts ?? {})) if (!bd.skip?.(k)) counts.set(k, (counts.get(k) ?? 0) + v);
+  for (const d of f.listDays) for (const [k, v] of Object.entries(d[bd.key]?.counts ?? {})) counts.set(k, (counts.get(k) ?? 0) + v);
   return { counts, fmt: estimated(count, cover.approx), notes: [bd.about, f.note, cover.note] };
 }
 

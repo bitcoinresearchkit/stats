@@ -426,19 +426,21 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
 
         <h2 id="defs-title">What these numbers are</h2>
         <p><b>Source.</b> Cloudflare's own counts of the requests it answered for bitview.space and its subdomains,
-          pulled every hour from its analytics API. Nothing was added to Bitview's pages for them. The one exception is
-          referring sites, which come from Cloudflare Web Analytics, a small script Cloudflare itself adds to Bitview's
-          pages. Days and hours are UTC.</p>
+          pulled every hour from its analytics API. Nothing was added to Bitview's pages for them. Days and hours are
+          UTC.</p>
+        <p><b>Referring sites</b> ended on Nov 17, 2026. They came from Cloudflare Web Analytics, a script Cloudflare
+          added to Bitview's pages for visitors outside the EU; it was turned off that day and the counts were
+          deleted.</p>
         <p><b>Exact or estimated.</b> Daily totals, countries, status codes, browsers, content types, HTTP and TLS
           versions and client reputation count every request, and so do the last three days of hours. Older hours,
-          routes, operating systems, devices, verified bots, cache status, edge locations, origin times, firewall events
-          and referring sites come from Cloudflare's sampled data: on busy days it keeps one request in N and scales
-          up. Those are marked ≈.</p>
-        <p><b>How far back.</b> On Bitview's plan Cloudflare keeps a year of daily totals, six months of Web Analytics,
-          a month of sampled data and three days of exact hours. This page started pulling on Nov 17, 2026 and keeps
-          every day and hour from then on, so daily totals start <span id="from-totals"></span>, hours
-          <span id="from-hours"></span>, referring sites <span id="from-referrers"></span> and the sampled breakdowns
-          <span id="from-sampled"></span>. A day or hour missing from the data is shown as missing, never as zero.</p>
+          routes, operating systems, devices, verified bots, cache status, edge locations, origin times and firewall
+          events come from Cloudflare's sampled data: on busy days it keeps one request in N and scales up. Those are
+          marked ≈.</p>
+        <p><b>How far back.</b> On Bitview's plan Cloudflare keeps a year of daily totals, a month of sampled data and
+          three days of exact hours. This page started pulling on Nov 17, 2026 and keeps every day and hour from then
+          on, so daily totals start <span id="from-totals"></span>, hours <span id="from-hours"></span> and the sampled
+          breakdowns <span id="from-sampled"></span>. A day or hour missing from the data is shown as missing, never as
+          zero.</p>
       </div>
     </section>
   </main>
