@@ -73,7 +73,17 @@ const cell = (v, fmt) => (v == null ? 'no data' : fmt(v));
 /** A Cloudflare name for reading: "searchEngine" -> "Search engine". */
 /** @param {string} s */
 const words = (s) => s && s[0].toUpperCase() + s.slice(1).replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
-const STATUS = { 1: 'Info', 2: 'Success', 3: 'Redirect', 4: 'Client error', 5: 'Server error' };
+/** HTTP's names for the codes Bitview answers with, else the code's class. */
+const STATUS = {
+  200: 'OK', 202: 'Accepted', 204: 'No content', 206: 'Partial content', 301: 'Moved permanently', 302: 'Found',
+  304: 'Not modified', 307: 'Temporary redirect', 308: 'Permanent redirect', 400: 'Bad request', 401: 'Unauthorized',
+  403: 'Forbidden', 404: 'Not found', 405: 'Method not allowed', 408: 'Request timeout', 413: 'Content too large',
+  429: 'Too many requests', 499: 'Client closed request', 500: 'Internal server error', 502: 'Bad gateway',
+  503: 'Service unavailable', 504: 'Gateway timeout', 520: 'Unknown error', 521: 'Web server is down',
+  522: 'Connection timed out', 523: 'Origin is unreachable', 524: 'A timeout occurred', 525: 'SSL handshake failed',
+  526: 'Invalid SSL certificate', 530: 'Origin DNS error',
+  1: 'Info', 2: 'Success', 3: 'Redirect', 4: 'Client error', 5: 'Server error',
+};
 /** Cloudflare's security features, as its firewall events name them. */
 const SOURCES = {
   bic: 'Browser integrity check', firewallManaged: 'Managed rules', firewallCustom: 'Custom rules', firewallRules: 'Firewall rules',
@@ -96,7 +106,7 @@ function country(code) {
 /** Every stored daily breakdown, drawn as a ranked list. */
 /** @type {Record<string, Breakdown>} */
 const BREAKDOWNS = Object.fromEntries(/** @type {Breakdown[]} */ ([
-  { key: 'status', title: 'Status codes', label: (k) => `${k} ${STATUS[/** @type {keyof STATUS} */ (k[0])] ?? ''}` },
+  { key: 'status', title: 'Status codes', label: (k) => `${k} ${STATUS[/** @type {keyof STATUS} */ (k)] ?? STATUS[/** @type {keyof STATUS} */ (k[0])] ?? ''}` },
   { key: 'firewallRules', title: 'By rule', unit: 'Events', label: source },
   { key: 'countries', title: 'Countries', label: country },
   { key: 'colos', title: 'Edge locations', about: "Cloudflare's data centers that answered." },
@@ -492,7 +502,7 @@ function sparkline(values, recent) {
   /** @param {number} from @param {number} to @param {string} color */
   const line = (from, to, color) => {
     const d = values.slice(from, to).map((v, k) => (v == null ? '' : `${k && values[from + k - 1] != null ? 'L' : 'M'}${(((from + k) / (n - 1)) * W).toFixed(1)},${(H - 1 - (v / max) * (H - 2)).toFixed(1)}`)).join('');
-    if (d) svg('path', { d, fill: 'none', stroke: color, 'stroke-width': 1.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, root);
+    if (d) svg('path', { d, fill: 'none', stroke: color, 'stroke-width': color === 'var(--s1)' ? 2 : 1.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, root);
   };
   line(0, n - recent + 1, 'var(--spark)');
   line(n - recent, n, 'var(--s1)');
@@ -604,7 +614,7 @@ const CHECKS = [
     about: 'Mostly scanners and mistyped addresses. Off above 10% and 2× usual.' },
   { label: 'Origin time, 95th pct', read: (hs) => originTime(hs, 'p95'), fmt: ms, limit: 1000, times: 2,
     about: "How long Bitview's servers took for the slowest 5% of requests. Off above 1 s and 2× usual." },
-  { label: 'Firewall events a day', read: (hs) => (having(hs, firewallOf).length ? (sum(hs, firewallOf) / having(hs, firewallOf).length) * 24 : null), fmt: count, limit: 1000, times: 5,
+  { label: 'Firewall events a day', read: (hs) => (having(hs, firewallOf).length ? (sum(hs, firewallOf) / having(hs, firewallOf).length) * 24 : null), fmt: (n) => `≈${count(Math.round(n))}`, limit: 1000, times: 5,
     about: 'Requests a Cloudflare security feature acted on. Off above 1,000 a day and 5× usual.' },
   { label: 'Served from cache', read: (hs) => measure(/** @type {Metric} */ (METRICS.find((m) => m.id === 'cache')), hs), fmt: pct, limit: 0.05, times: 0.5, low: true,
     about: 'Off below half its usual share, or 5%.' },
@@ -638,8 +648,8 @@ function status() {
   const pulled = `${clockFormat.format(new Date(now.pulled))} UTC`;
   items.push({
     label: 'This page',
-    value: age >= 1 ? `${Math.floor(age)} h ago` : `${Math.round(age * 60)} min ago`,
-    usual: 'pulled hourly',
+    value: age >= 1 ? `Pulled ${Math.floor(age)} h ago` : 'On time',
+    usual: '',
     off: age > 3,
     about: 'Pulled from Cloudflare every hour. Off when the last pull is over 3 hours old.',
   });
@@ -706,7 +716,7 @@ function overview() {
   const period = length === 1 ? '24 hours' : `${span} days`;
   const through = new Date(now.through);
   $('through').textContent = hourly
-    ? `The last ${period} by hour, to ${dayFormat.format(through)}, ${clockFormat.format(through)} UTC${missing ? `, ${missing} hours missing` : ''}. Lists cover ${main.listDays.length === 1 ? longDayFormat.format(toDate(main.listDays[0].date)) : `${dayFormat.format(toDate(main.start))} to ${dayFormat.format(toDate(main.last))}`}, by day. Changes compare with the ${period} before.`
+    ? `The last ${period} by hour, to ${dayFormat.format(through)}, ${clockFormat.format(through)} UTC${missing ? `, ${missing} hours missing` : ''}. Lists cover ${main.listDays.length === 1 ? longDayFormat.format(toDate(main.listDays[0].date)) : `${dayFormat.format(toDate(main.start))} to ${dayFormat.format(toDate(main.last))}`}, by day.`
     : `${longDayFormat.format(toDate(main.start))} to ${longDayFormat.format(toDate(main.last))}, UTC${missing ? `, ${daysWord(missing)} missing` : ''}. A chart with less history shows what it has, and says so.`;
 
   const metrics = METRICS.filter((m) => !(hourly && m.daily));
@@ -721,7 +731,7 @@ function overview() {
       btn.type = 'button';
       btn.setAttribute('aria-pressed', String(m.id === state.metric));
       const delta = v == null || p == null || !p ? '' : m.total === 'ratio' ? `${v >= p ? '↑' : '↓'} ${(Math.abs(v - p) * 100).toFixed(1)} pts` : `${v >= p ? '↑' : '↓'} ${pct(Math.abs(v / p - 1))}`;
-      const sub = missing ? `Over ${recs.length} of ${recs.length + missing} ${word}s` : delta || (length ? 'No earlier period' : 'Every kept day');
+      const sub = missing ? `Over ${recs.length} of ${recs.length + missing} ${word}s` : delta ? `${delta} vs prior ${main.range[1]}` : length ? 'No earlier period' : 'Every kept day';
       btn.append(html('span', 'k', m.label), html('span', 'v', v == null ? 'no data' : estimated(m.fmt, approx && m.total !== 'ratio')(v)), html('span', 'd', sub));
       btn.addEventListener('click', () => ((state.metric = m.id), render()));
       return btn;
@@ -926,12 +936,7 @@ function inventory(inv) {
       const li = html('li');
       const a = html('a');
       a.setAttribute('href', `#mark-${ic}`);
-      a.append(icon(ic), html('b', '', title));
-      if (mark === 'not published') {
-        const items = html('ul');
-        items.append(...rows.map((r) => html('li', '', r === last ? 'Everything else' : r.what)));
-        a.append(items);
-      } else a.append(html('p', '', `${rows.length} kinds. ${meaning}`));
+      a.append(icon(ic), html('b', '', `${title}: ${rows.length} kinds`), html('p', '', meaning));
       li.append(a);
       return li;
     }),
@@ -962,7 +967,7 @@ function inventory(inv) {
   };
 
   const read = inv.datasets.filter((d) => d.read);
-  $('reads').textContent = `${read.map((d) => d.name).join(', ')} (${read.length} of the ${inv.datasets.length} datasets Cloudflare offers)`;
+  $('reads').textContent = `${read.length} of the ${inv.datasets.length} datasets Cloudflare offers`;
   const rank = (/** @type {Dataset} */ d) => Number(!d.read) + Number(!d.visitors);
   const list = [...inv.datasets].sort((a, z) => rank(a) - rank(z) || a.name.localeCompare(z.name));
   table($('datasets'), ['Dataset', 'Records', 'Kept', 'Fields', 'Read by pull.py'], list.map((d) => [

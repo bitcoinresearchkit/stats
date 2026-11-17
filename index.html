@@ -107,15 +107,13 @@ small, .note { font-size: var(--t2); color: var(--soft); }
 /* Intro and status */
 .hero { display: grid; gap: 24px; padding: 24px 0 40px; }
 .intro { display: grid; gap: 16px; align-content: start; }
-.lead { font-size: var(--t4); line-height: 1.5; color: var(--text); max-width: 34em; }
+.lead { font-size: var(--t4); line-height: 1.5; color: var(--text); max-width: 34em; text-wrap: balance; }
 .marks ul { display: grid; margin: 0; padding: 0; list-style: none; }
 .marks li + li { border-top: 1px solid var(--line); }
 .marks a { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 4px 10px; padding: 14px 0; text-decoration: none; }
 .marks .icon { margin-top: 3px; color: var(--soft); }
 .marks b { color: var(--ink); font-weight: 600; }
 .marks a:hover b { text-decoration: underline; text-decoration-color: var(--line2); }
-.marks ul ul { grid-column: 2; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15em), 1fr)); gap: 2px 16px; color: var(--text); }
-.marks ul ul li { border: 0; }
 .marks p { grid-column: 2; color: var(--soft); }
 
 .panel.status { padding: 0; align-self: start; overflow: hidden; }
@@ -136,6 +134,7 @@ small, .note { font-size: var(--t2); color: var(--soft); }
 @media (prefers-reduced-motion: reduce) { .checks summary > .icon:last-child { transition: none; } }
 .checks summary::-webkit-details-marker { display: none; }
 .checks summary:hover { background: var(--raise); }
+.checks summary:focus-visible { outline-offset: -2px; border-radius: 0; }
 .checks .icon { color: var(--ok); }
 .checks [data-off="true"] .icon { color: var(--warn); }
 .checks .label { color: var(--ink); min-width: 0; }
@@ -152,8 +151,7 @@ small, .note { font-size: var(--t2); color: var(--soft); }
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
   padding: max(10px, env(safe-area-inset-top)) var(--gutter) 10px;
   margin: 0 calc(-1 * var(--gutter));
-  background: color-mix(in srgb, var(--app) 88%, transparent);
-  -webkit-backdrop-filter: saturate(1.4) blur(12px); backdrop-filter: saturate(1.4) blur(12px);
+  background: var(--app);
   border-bottom: 1px solid transparent;
 }
 .bar.stuck { border-bottom-color: var(--line); }
@@ -238,6 +236,10 @@ td { border-top: 1px solid var(--line); color: var(--ink); }
 
 /* Panels and their grids */
 .grid { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
+/* Cards of uneven heights, flowed into balanced columns. */
+.cols { columns: 2 440px; column-gap: 16px; }
+.cols .panel { break-inside: avoid; margin-bottom: 16px; }
+#cards { display: contents; }
 .panel > header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 12px; }
 .panel > header .tabs { margin: -6px 0; }
 .panel .note { margin-top: 10px; }
@@ -279,7 +281,7 @@ td { border-top: 1px solid var(--line); color: var(--ink); }
 .inv-group > h3 .icon { color: var(--soft); }
 .inv-group > h3 small { font-weight: 400; }
 .inv { list-style: none; margin: 0; padding: 0; }
-.inv li { display: grid; grid-template-columns: 16em minmax(0, 1fr) 9em; gap: 2px 20px; padding: 10px 0; border-top: 1px solid var(--line); font-size: var(--t2); }
+.inv li { display: grid; grid-template-columns: 16em minmax(0, 1fr) 10.5em; gap: 2px 20px; padding: 10px 0; border-top: 1px solid var(--line); font-size: var(--t2); }
 .inv .what { color: var(--ink); font-weight: 500; }
 .inv .kept { color: var(--soft); text-align: right; white-space: nowrap; }
 .inv code { display: none; margin-top: 4px; font: inherit; font-size: var(--t1); color: var(--soft); overflow-wrap: anywhere; }
@@ -312,7 +314,6 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
   .checks .usual { min-width: 0; font-size: var(--t1); }
   .checks .spark, .checks + .note { display: none; }
   .verdict { padding: 16px; }
-  .marks ul ul { grid-template-columns: 1fr; }
   .inv-group > h3 small { flex-basis: 100%; padding-left: 26px; }
   .inv li { grid-template-columns: minmax(0, 1fr) auto; }
   .inv .how { grid-column: 1 / -1; grid-row: 2; }
@@ -331,8 +332,8 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
   <div class="hero">
     <section class="intro" aria-labelledby="title">
       <h1 id="title">What Bitview can see</h1>
-      <p class="lead">Bitview is served through Cloudflare, which records every request. Here is what Cloudflare
-        offers Bitview's operators about you, what is published from it, and the traffic itself.</p>
+      <p class="lead">Bitview is served through Cloudflare, which sees every request. Only counts are published from
+        it, never your IP address, your browser's full user agent, your network or what you looked up.</p>
     </section>
 
     <section class="panel status" id="status" aria-labelledby="verdict">
@@ -380,7 +381,7 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
         <details class="table" id="errors-table"></details>
       </section>
 
-      <div class="grid">
+      <div class="cols">
         <section class="panel" aria-labelledby="speed-title">
           <header><h2 id="speed-title">Origin response time</h2><div class="legend" id="speed-legend"></div></header>
           <div class="chart" id="speed-chart" style="--h: 200px"></div>
@@ -395,19 +396,18 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
           <h3 class="sub">By rule</h3>
           <div id="firewall-rules"></div>
         </section>
+        <div id="cards"></div>
       </div>
-
-      <div class="grid" id="cards"></div>
     </div>
 
     <section class="section" id="inventory" aria-labelledby="inventory-title">
       <header>
-        <h2 id="inventory-title">What we can see</h2>
+        <h2 id="inventory-title">What Bitview can see, in full</h2>
         <p>Cloudflare keeps a record of each request for up to a month, with the IP address, the full user agent, the
           path and query, and more, and Bitview's operators could read all of it. Nothing of ours does: one script,
           <a href="https://github.com/bitcoinresearchkit/stats/blob/main/pull.py">pull.py</a>, reads
           <span id="reads"></span>, plus the zone's DNS names and its tunnels' status, every hour, and publishes only
-          what is marked below.</p>
+          what is marked below. The datasets are listed under it.</p>
         <div><button class="toggle" id="show-fields" type="button" aria-pressed="false">Show Cloudflare's field names</button></div>
       </header>
       <div class="panel" id="inventory-list"></div>
@@ -448,7 +448,6 @@ footer { margin: 64px 0 0; padding: 20px 0 max(32px, env(safe-area-inset-bottom)
   <footer>
     <a href="https://github.com/bitcoinresearchkit/stats">Data and code</a>
     <a href="https://bitview.space/privacy/">Privacy</a>
-    <span>Updated every hour</span>
   </footer>
 </div>
 <script type="module" src="app.js"></script>
