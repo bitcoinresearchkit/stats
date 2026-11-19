@@ -45,7 +45,7 @@ names and the status of the tunnels that carry its requests.
 | Minutes | not published | Hours at most: on a quiet minute, a breakdown can single out one visit. | up to 1 year | `datetimeFifteenMinutes`, `datetimeFiveMinutes`, `datetimeHalfOfHour`, `datetimeMinute` |
 | Everything else | not published | Not read: browser and system versions, security rules and their matches, performance timings, and fields of other Cloudflare features. | up to 1 year | 624 more, in `data/inventory.json` |
 
-Cloudflare offers this account 250 datasets. The table covers the 49 that record Bitview's visitors: bitview.space's own, and Web Analytics. The other 201 belong to Cloudflare's other products on the account. `pull.py` reads `firewallEventsAdaptive` (1 month), `httpRequests1dGroups` (1 year), `httpRequests1hGroups` (3 days), `httpRequestsAdaptiveGroups` (1 month), `httpRequestsOverviewAdaptiveGroups` (1 month).
+Cloudflare offers this account 252 datasets. The table covers the 49 that record Bitview's visitors: bitview.space's own, and Web Analytics. The other 203 belong to Cloudflare's other products on the account. `pull.py` reads `firewallEventsAdaptive` (1 month), `httpRequests1dGroups` (1 year), `httpRequests1hGroups` (3 days), `httpRequestsAdaptiveGroups` (1 month), `httpRequestsOverviewAdaptiveGroups` (1 month).
 <!-- end of inventory -->
 
 The full list, dataset by dataset and field by field, is in [`data/inventory.json`](data/inventory.json).
